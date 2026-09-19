@@ -35,7 +35,7 @@ function fakeDatabase(seed: Record<string, unknown> = {}): AppDatabase {
       },
       first: async <T>() => {
         // 잔액 더하기: 음수가 되면 아무것도 바꾸지 않는다.
-        if (sql.includes("json_set(value_json")) {
+        if (sql.includes("'$.leaves'")) {
           const delta = Number(args[0]);
           const id = String(args[1]);
           const stored = rows.get(id);
@@ -58,6 +58,22 @@ function fakeDatabase(seed: Record<string, unknown> = {}): AppDatabase {
           }
           rows.set(id, value);
           return { id } as T;
+        }
+        // 모임 자리 차지: 정원이 찼거나 이미 멤버면 아무것도 바꾸지 않는다.
+        if (sql.includes("$.memberIds[#]")) {
+          const userId = String(args[0]);
+          const id = String(args[1]);
+          const stored = rows.get(id);
+          if (!stored) return null;
+          const doc = JSON.parse(stored) as {
+            memberIds: string[];
+            max: number;
+          };
+          if (doc.memberIds.includes(userId)) return null;
+          if (doc.memberIds.length >= doc.max) return null;
+          const members = [...doc.memberIds, userId];
+          rows.set(id, JSON.stringify({ ...doc, memberIds: members }));
+          return { members: JSON.stringify(members) } as T;
         }
         const value = rows.get(String(args[0]));
         return value ? ({ value_json: value } as T) : null;
@@ -420,4 +436,515 @@ test("cancelling an open task refunds the escrow", async () => {
   assert.equal(cancelled?.status, 200);
   const body = (await cancelled?.json()) as { leaves: number };
   assert.equal(body.leaves, 100);
+});
+
+// ---------------------------------------------------------------------------
+// 튜토리얼 미션과 인증 — 보상 금액과 심사 결과를 서버가 정한다
+// ---------------------------------------------------------------------------
+
+const missionDraft = {
+  title: "학생식당 가보기",
+  description: "",
+  proof: "식판 사진",
+  category: "campus",
+  reward: 9999, // 클라이언트가 보낸 보상은 무시돼야 한다
+};
+
+function senior(managerId: string, leaves = 0) {
+  return { ...user(managerId, leaves), role: "senior" };
+}
+
+test("the server sets the reward and ignores what the client asked for", async () => {
+  const database = fakeDatabase({ "user:ch1:sunbae": senior("sunbae") });
+  const env = { APP_SECRET: secret };
+
+  const created = await withDatabase(database, () =>
+    handleApiRequest(
+      asUser(tokenFor("sunbae"), "/api/missions/create", missionDraft),
+      env,
+    ),
+  );
+  assert.equal(created?.status, 201);
+  const body = (await created?.json()) as {
+    mission: { reward: number; authorId: string };
+    leaves: number | null;
+  };
+  assert.equal(body.mission.reward, 10);
+  assert.equal(body.mission.authorId, "ch1:sunbae");
+  // 제작 보상 15잎이 글쓴이에게 들어간다.
+  assert.equal(body.leaves, 15);
+});
+
+test("only a senior can publish a tutorial", async () => {
+  const database = fakeDatabase({ "user:ch1:sinip": user("sinip", 0) });
+  const env = { APP_SECRET: secret };
+  const response = await withDatabase(database, () =>
+    handleApiRequest(
+      asUser(tokenFor("sinip"), "/api/missions/create", missionDraft),
+      env,
+    ),
+  );
+  assert.equal(response?.status, 403);
+});
+
+test("the same mission cannot be submitted twice while one is pending", async () => {
+  const database = fakeDatabase({
+    "user:ch1:sunbae": senior("sunbae"),
+    "user:ch1:sinip": user("sinip", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("sunbae", "/api/missions/create", missionDraft);
+  const { mission } = (await created?.json()) as { mission: { id: string } };
+
+  const first = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "다녀왔어요",
+  });
+  assert.equal(first?.status, 201);
+
+  const again = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "또 냈어요",
+  });
+  assert.equal(again?.status, 409);
+  assert.deepEqual(await again?.json(), { error: "already_submitted" });
+});
+
+test("approving pays the submitter once, and only the mission's author may judge", async () => {
+  const database = fakeDatabase({
+    "user:ch1:sunbae": senior("sunbae"),
+    "user:ch1:other": senior("other"),
+    "user:ch1:sinip": user("sinip", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("sunbae", "/api/missions/create", missionDraft);
+  const { mission } = (await created?.json()) as { mission: { id: string } };
+  const submitted = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "다녀왔어요",
+  });
+  const { submission } = (await submitted?.json()) as {
+    submission: { id: string };
+  };
+
+  // 제출자 본인은 심사할 수 없다.
+  assert.equal(
+    (
+      await call("sinip", "/api/submissions/review", {
+        submissionId: submission.id,
+        approve: true,
+      })
+    )?.status,
+    403,
+  );
+  // 미션을 만들지 않은 다른 선배도 안 된다.
+  assert.equal(
+    (
+      await call("other", "/api/submissions/review", {
+        submissionId: submission.id,
+        approve: true,
+      })
+    )?.status,
+    403,
+  );
+
+  const approved = await call("sunbae", "/api/submissions/review", {
+    submissionId: submission.id,
+    approve: true,
+  });
+  assert.equal(approved?.status, 200);
+
+  const me = await call("sinip", "/api/me");
+  const { profile } = (await me?.json()) as { profile: { leaves: number } };
+  assert.equal(profile.leaves, 10);
+
+  // 두 번 승인해도 보상은 한 번만 나간다.
+  assert.equal(
+    (
+      await call("sunbae", "/api/submissions/review", {
+        submissionId: submission.id,
+        approve: true,
+      })
+    )?.status,
+    409,
+  );
+  const again = await call("sinip", "/api/me");
+  const { profile: after } = (await again?.json()) as {
+    profile: { leaves: number };
+  };
+  assert.equal(after.leaves, 10);
+});
+
+test("a rejected submission pays nothing and can be retried", async () => {
+  const database = fakeDatabase({
+    "user:ch1:sunbae": senior("sunbae"),
+    "user:ch1:sinip": user("sinip", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("sunbae", "/api/missions/create", missionDraft);
+  const { mission } = (await created?.json()) as { mission: { id: string } };
+  const submitted = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "확인 부탁드려요",
+  });
+  const { submission } = (await submitted?.json()) as {
+    submission: { id: string };
+  };
+
+  await call("sunbae", "/api/submissions/review", {
+    submissionId: submission.id,
+    approve: false,
+  });
+
+  const me = await call("sinip", "/api/me");
+  const { profile } = (await me?.json()) as { profile: { leaves: number } };
+  assert.equal(profile.leaves, 0);
+
+  // 반려된 뒤에는 다시 낼 수 있다.
+  const retry = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "다시 냈어요",
+  });
+  assert.equal(retry?.status, 201);
+});
+
+// ---------------------------------------------------------------------------
+// 만남 신청과 모임방 — 자리와 수락 여부를 서버가 정한다
+// ---------------------------------------------------------------------------
+
+const roomDraft = {
+  title: "점심 같이 먹어요",
+  theme: "play",
+  place: "학관",
+  until: 9_999_999_999_999,
+  max: 2,
+  note: "",
+};
+
+test("the last seat in a room goes to exactly one of two people", async () => {
+  const database = fakeDatabase({
+    "user:ch1:host": user("host", 0),
+    "user:ch1:bee": user("bee", 0),
+    "user:ch1:cee": user("cee", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  // 정원 2, 호스트가 한 자리를 이미 차지하므로 남는 자리는 하나뿐이다.
+  const created = await call("host", "/api/rooms/create", roomDraft);
+  const { room } = (await created?.json()) as { room: { id: string } };
+
+  const [bee, cee] = await Promise.all([
+    call("bee", "/api/rooms/join", { roomId: room.id }),
+    call("cee", "/api/rooms/join", { roomId: room.id }),
+  ]);
+  assert.deepEqual([bee?.status, cee?.status].sort(), [200, 409]);
+
+  const loser = bee?.status === 409 ? bee : cee;
+  assert.deepEqual(await loser?.json(), { error: "room_full" });
+
+  const winner = bee?.status === 200 ? bee : cee;
+  const body = (await winner?.json()) as { room: { memberIds: string[] } };
+  assert.equal(body.room.memberIds.length, 2);
+});
+
+test("joining a room you are already in is refused", async () => {
+  const database = fakeDatabase({ "user:ch1:host": user("host", 0) });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("host", "/api/rooms/create", roomDraft);
+  const { room } = (await created?.json()) as { room: { id: string } };
+
+  const again = await call("host", "/api/rooms/join", { roomId: room.id });
+  assert.equal(again?.status, 409);
+});
+
+test("a request is answered by the person who received it", async () => {
+  const database = fakeDatabase({
+    "user:ch1:from": user("from", 0),
+    "user:ch1:to": user("to", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const sent = await call("from", "/api/requests/dm", {
+    toId: "ch1:to",
+    theme: "study",
+    message: "같이 공부해요",
+  });
+  assert.equal(sent?.status, 201);
+  const { request } = (await sent?.json()) as { request: { id: string } };
+
+  // 보낸 사람이 자기 신청을 수락할 수는 없다.
+  assert.equal(
+    (
+      await call("from", "/api/requests/respond", {
+        requestId: request.id,
+        accept: true,
+      })
+    )?.status,
+    403,
+  );
+
+  const accepted = await call("to", "/api/requests/respond", {
+    requestId: request.id,
+    accept: true,
+  });
+  assert.equal(accepted?.status, 200);
+
+  // 한 번 답한 신청에는 다시 답할 수 없다.
+  assert.equal(
+    (
+      await call("to", "/api/requests/respond", {
+        requestId: request.id,
+        accept: false,
+      })
+    )?.status,
+    409,
+  );
+});
+
+test("the same person cannot be asked twice while one request waits", async () => {
+  const database = fakeDatabase({
+    "user:ch1:from": user("from", 0),
+    "user:ch1:to": user("to", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const dm = { toId: "ch1:to", theme: "study", message: "안녕하세요" };
+  assert.equal((await call("from", "/api/requests/dm", dm))?.status, 201);
+  const again = await call("from", "/api/requests/dm", dm);
+  assert.equal(again?.status, 409);
+  assert.deepEqual(await again?.json(), { error: "already_requested" });
+
+  // 자기 자신에게는 보낼 수 없다.
+  const self = await call("from", "/api/requests/dm", {
+    ...dm,
+    toId: "ch1:from",
+  });
+  assert.equal(self?.status, 403);
+});
+
+test("only people in a room may invite, and members are not invited again", async () => {
+  const database = fakeDatabase({
+    "user:ch1:host": user("host", 0),
+    "user:ch1:outsider": user("outsider", 0),
+    "user:ch1:guest": user("guest", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("host", "/api/rooms/create", {
+    ...roomDraft,
+    max: 5,
+  });
+  const { room } = (await created?.json()) as { room: { id: string } };
+
+  assert.equal(
+    (
+      await call("outsider", "/api/rooms/invite", {
+        roomId: room.id,
+        toIds: ["ch1:guest"],
+      })
+    )?.status,
+    403,
+  );
+
+  // 호스트 자신과 이미 들어온 사람은 초대 대상에서 빠진다.
+  const invited = await call("host", "/api/rooms/invite", {
+    roomId: room.id,
+    toIds: ["ch1:guest", "ch1:host"],
+  });
+  assert.equal(invited?.status, 201);
+  const body = (await invited?.json()) as { requests: { toId: string }[] };
+  assert.deepEqual(
+    body.requests.map((r) => r.toId),
+    ["ch1:guest"],
+  );
+});
+
+// ---------------------------------------------------------------------------
+// 채팅과 은행잎 충전 — 대화 소속과 지급량을 서버가 정한다
+// ---------------------------------------------------------------------------
+
+test("charging pays the pack amount, whatever the request says", async () => {
+  const database = fakeDatabase({ "user:ch1:payer": user("payer", 0) });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  // 금액을 직접 실어 보내도 무시된다. 상품 번호만 읽는다.
+  const charged = await call("payer", "/api/leaves/charge", {
+    packIndex: 0,
+    amount: 99999,
+    price: 0,
+  });
+  assert.equal(charged?.status, 200);
+  const body = (await charged?.json()) as { leaves: number; amount: number };
+  assert.equal(body.amount, 10);
+  assert.equal(body.leaves, 10);
+
+  // 없는 상품 번호는 거절한다.
+  const bogus = await call("payer", "/api/leaves/charge", { packIndex: 99 });
+  assert.equal(bogus?.status, 400);
+});
+
+test("a room chat is closed to people who are not in the room", async () => {
+  const database = fakeDatabase({
+    "user:ch1:host": user("host", 0),
+    "user:ch1:stranger": user("stranger", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("host", "/api/rooms/create", roomDraft);
+  const { room } = (await created?.json()) as { room: { id: string } };
+  const chatId = `room:${room.id}`;
+
+  const sent = await call("host", "/api/chat/send", {
+    chatId,
+    text: "안녕하세요",
+  });
+  assert.equal(sent?.status, 201);
+
+  // 방에 없는 사람은 읽지도 쓰지도 못한다.
+  assert.equal((await call("stranger", "/api/chat", { chatId }))?.status, 403);
+  assert.equal(
+    (await call("stranger", "/api/chat/send", { chatId, text: "끼어들기" }))
+      ?.status,
+    403,
+  );
+
+  const history = await call("host", "/api/chat", { chatId });
+  const read = (await history?.json()) as { messages: { text: string }[] };
+  assert.deepEqual(
+    read.messages.map((m) => m.text),
+    ["안녕하세요"],
+  );
+});
+
+test("a direct chat opens only after the request was accepted", async () => {
+  const database = fakeDatabase({
+    "user:ch1:from": user("from", 0),
+    "user:ch1:to": user("to", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const chatId = "dm:ch1:to";
+
+  // 신청하기 전에는 열리지 않는다.
+  assert.equal(
+    (await call("from", "/api/chat/send", { chatId, text: "안녕" }))?.status,
+    403,
+  );
+
+  const sent = await call("from", "/api/requests/dm", {
+    toId: "ch1:to",
+    theme: "study",
+    message: "같이 공부해요",
+  });
+  const { request } = (await sent?.json()) as { request: { id: string } };
+
+  // 대기 중일 때도 아직 열리지 않는다.
+  assert.equal(
+    (await call("from", "/api/chat/send", { chatId, text: "안녕" }))?.status,
+    403,
+  );
+
+  await call("to", "/api/requests/respond", {
+    requestId: request.id,
+    accept: true,
+  });
+
+  // 수락된 뒤에는 양쪽 다 쓸 수 있다.
+  assert.equal(
+    (await call("from", "/api/chat/send", { chatId, text: "안녕하세요" }))
+      ?.status,
+    201,
+  );
+  assert.equal(
+    (
+      await call("to", "/api/chat/send", {
+        chatId: "dm:ch1:from",
+        text: "반가워요",
+      })
+    )?.status,
+    201,
+  );
+});
+
+test("an errand chat is open to the two people in it and nobody else", async () => {
+  const database = fakeDatabase({
+    "user:ch1:alice": user("alice", 100),
+    "user:ch1:bob": user("bob", 0),
+    "user:ch1:nosy": user("nosy", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("alice", "/api/tasks/create", draft);
+  const { task } = (await created?.json()) as { task: { id: string } };
+  const chatId = `task:${task.id}`;
+
+  // 아직 맡은 사람이 없어도 요청자는 쓸 수 있다.
+  assert.equal(
+    (await call("alice", "/api/chat/send", { chatId, text: "부탁드려요" }))
+      ?.status,
+    201,
+  );
+  // 무관한 사람은 막힌다.
+  assert.equal((await call("nosy", "/api/chat", { chatId }))?.status, 403);
+
+  await call("bob", "/api/tasks/take", { taskId: task.id });
+  // 맡은 뒤에는 작업자도 들어온다.
+  assert.equal(
+    (await call("bob", "/api/chat/send", { chatId, text: "지금 갈게요" }))
+      ?.status,
+    201,
+  );
+  assert.equal((await call("nosy", "/api/chat", { chatId }))?.status, 403);
 });

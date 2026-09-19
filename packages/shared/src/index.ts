@@ -187,3 +187,181 @@ export const LedgerEntrySchema = z.object({
 });
 
 export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;
+
+// ---- 튜토리얼 미션과 인증 ----
+
+/** 보상은 서버가 정한다. 클라이언트가 보낸 값은 쓰지 않는다. */
+export const MISSION_CREATE_REWARD = 15;
+export const MISSION_CLEAR_REWARD = 10;
+
+export const MissionCategorySchema = z.enum([
+  "campus",
+  "academic",
+  "life",
+  "digital",
+]);
+
+export const MissionDraftSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(300).default(""),
+  proof: z.string().trim().max(200).default(""),
+  category: MissionCategorySchema,
+});
+
+export type MissionDraft = z.infer<typeof MissionDraftSchema>;
+
+export const MissionSchema = MissionDraftSchema.extend({
+  id: z.string(),
+  channelId: z.string(),
+  authorId: z.string(),
+  reward: z.number().int(),
+  recommenders: z.array(z.string()),
+  completedCount: z.number().int(),
+  createdAt: z.number().int(),
+});
+
+export type Mission = z.infer<typeof MissionSchema>;
+
+export const SubmissionStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const SubmitMissionInputSchema = z.object({
+  missionId: z.string().min(1),
+  note: z.string().trim().max(300).default(""),
+});
+
+export const ReviewSubmissionInputSchema = z.object({
+  submissionId: z.string().min(1),
+  approve: z.boolean(),
+});
+
+export const MissionIdInputSchema = z.object({
+  missionId: z.string().min(1),
+});
+
+export const SubmissionSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  missionId: z.string(),
+  userId: z.string(),
+  note: z.string(),
+  status: SubmissionStatusSchema,
+  reviewerId: z.string().nullable(),
+  createdAt: z.number().int(),
+  reviewedAt: z.number().int().nullable(),
+});
+
+export type Submission = z.infer<typeof SubmissionSchema>;
+
+// ---- 만남 신청과 모임방 ----
+
+export const MeetThemeSchema = z.enum(["play", "study"]);
+export const RequestStatusSchema = z.enum(["pending", "accepted", "declined"]);
+
+export const RoomDraftSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  theme: MeetThemeSchema,
+  place: z.string().trim().max(40).default(""),
+  /** 모임이 끝나는 시각. epoch 밀리초 */
+  until: z.number().int().positive(),
+  max: z.number().int().min(2).max(20),
+  note: z.string().trim().max(200).default(""),
+});
+
+export type RoomDraft = z.infer<typeof RoomDraftSchema>;
+
+export const RoomSchema = RoomDraftSchema.extend({
+  id: z.string(),
+  channelId: z.string(),
+  hostId: z.string(),
+  memberIds: z.array(z.string()),
+  createdAt: z.number().int(),
+});
+
+export type Room = z.infer<typeof RoomSchema>;
+
+export const MeetRequestSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  kind: z.enum(["dm", "room"]),
+  fromId: z.string(),
+  toId: z.string(),
+  roomId: z.string().nullable(),
+  theme: MeetThemeSchema,
+  message: z.string(),
+  status: RequestStatusSchema,
+  createdAt: z.number().int(),
+  resolvedAt: z.number().int().nullable(),
+});
+
+export type MeetRequest = z.infer<typeof MeetRequestSchema>;
+
+export const SendDmInputSchema = z.object({
+  toId: z.string().min(1),
+  theme: MeetThemeSchema,
+  message: z.string().trim().max(200).default(""),
+});
+
+export const InviteInputSchema = z.object({
+  roomId: z.string().min(1),
+  toIds: z.array(z.string().min(1)).min(1).max(20),
+});
+
+export const RespondRequestInputSchema = z.object({
+  requestId: z.string().min(1),
+  accept: z.boolean(),
+});
+
+export const RoomIdInputSchema = z.object({ roomId: z.string().min(1) });
+
+// ---- 은행잎 충전 ----
+
+/**
+ * 충전 상품표. 서버가 갖는다.
+ * 클라이언트가 금액을 정하면 잎을 원하는 만큼 찍을 수 있으므로,
+ * 요청은 상품 번호만 보내고 지급량은 여기서 읽는다.
+ */
+export const CHARGE_PACKS = [
+  { amount: 10, price: 1000 },
+  { amount: 30, price: 2900 },
+  { amount: 50, price: 4500 },
+  { amount: 100, price: 8500 },
+] as const;
+
+export const ChargeInputSchema = z.object({
+  packIndex: z
+    .number()
+    .int()
+    .min(0)
+    .max(CHARGE_PACKS.length - 1),
+});
+
+// ---- 채팅 ----
+
+/** `dm:<상대ID>` · `room:<모임ID>` · `task:<부탁ID>` */
+export const ChatIdSchema = z
+  .string()
+  .min(3)
+  .max(120)
+  .regex(/^(dm|room|task):.+$/);
+
+export const ChatMessageSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  chatId: z.string(),
+  senderId: z.string(),
+  text: z.string(),
+  at: z.number().int(),
+});
+
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+export const SendChatInputSchema = z.object({
+  chatId: ChatIdSchema,
+  text: z.string().trim().min(1).max(500),
+});
+
+export const ChatHistoryInputSchema = z.object({ chatId: ChatIdSchema });

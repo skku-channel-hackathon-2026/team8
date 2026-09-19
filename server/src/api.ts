@@ -6,6 +6,27 @@ import {
   type Peer,
   type Profile,
 } from "@tutorial/shared";
+import { ChatError, charge, listLedger, readChat, sendChat } from "./chat.js";
+import {
+  MeetError,
+  createRoom,
+  invite,
+  joinRoom,
+  leaveRoom,
+  listRequests,
+  listRooms,
+  respondRequest,
+  sendDm,
+} from "./meet.js";
+import {
+  MissionError,
+  createMission,
+  listMissions,
+  listSubmissions,
+  reviewSubmission,
+  submitMission,
+  toggleRecommend,
+} from "./missions.js";
 import {
   MarketError,
   cancelTask,
@@ -124,6 +145,24 @@ const ROUTES: Record<string, string> = {
   "/api/tasks/report": "POST",
   "/api/tasks/confirm": "POST",
   "/api/tasks/cancel": "POST",
+  "/api/missions": "GET",
+  "/api/missions/create": "POST",
+  "/api/missions/recommend": "POST",
+  "/api/submissions": "GET",
+  "/api/submissions/create": "POST",
+  "/api/submissions/review": "POST",
+  "/api/rooms": "GET",
+  "/api/rooms/create": "POST",
+  "/api/rooms/join": "POST",
+  "/api/rooms/leave": "POST",
+  "/api/rooms/invite": "POST",
+  "/api/requests": "GET",
+  "/api/requests/dm": "POST",
+  "/api/requests/respond": "POST",
+  "/api/chat": "POST",
+  "/api/chat/send": "POST",
+  "/api/leaves/charge": "POST",
+  "/api/leaves/ledger": "GET",
 };
 
 export async function handleApiRequest(
@@ -214,6 +253,88 @@ export async function handleApiRequest(
       return json(await cancelTask(key, body));
     } catch (error) {
       if (error instanceof MarketError) {
+        return json({ error: error.code }, error.status);
+      }
+      throw error;
+    }
+  }
+
+  // ---- 튜토리얼 미션과 인증 ------------------------------------------------
+  if (path.startsWith("/api/missions") || path.startsWith("/api/submissions")) {
+    try {
+      if (path === "/api/missions") {
+        return json({ missions: await listMissions(session.channelId) });
+      }
+      if (path === "/api/submissions") {
+        return json({
+          submissions: await listSubmissions(key, session.channelId),
+        });
+      }
+      const body = await readJson(request);
+      if (path === "/api/missions/create") {
+        return json(await createMission(key, session.channelId, body), 201);
+      }
+      if (path === "/api/missions/recommend") {
+        return json(await toggleRecommend(key, body));
+      }
+      if (path === "/api/submissions/create") {
+        return json(await submitMission(key, session.channelId, body), 201);
+      }
+      return json(await reviewSubmission(key, body));
+    } catch (error) {
+      if (error instanceof MissionError) {
+        return json({ error: error.code }, error.status);
+      }
+      throw error;
+    }
+  }
+
+  // ---- 만남 신청과 모임방 --------------------------------------------------
+  if (path.startsWith("/api/rooms") || path.startsWith("/api/requests")) {
+    try {
+      if (path === "/api/rooms") {
+        return json({ rooms: await listRooms(session.channelId) });
+      }
+      if (path === "/api/requests") {
+        return json({ requests: await listRequests(key, session.channelId) });
+      }
+      const body = await readJson(request);
+      if (path === "/api/rooms/create") {
+        return json(await createRoom(key, session.channelId, body), 201);
+      }
+      if (path === "/api/rooms/join") return json(await joinRoom(key, body));
+      if (path === "/api/rooms/leave") return json(await leaveRoom(key, body));
+      if (path === "/api/rooms/invite") {
+        return json(await invite(key, session.channelId, body), 201);
+      }
+      if (path === "/api/requests/dm") {
+        return json(await sendDm(key, session.channelId, body), 201);
+      }
+      return json(await respondRequest(key, body));
+    } catch (error) {
+      if (error instanceof MeetError) {
+        return json({ error: error.code }, error.status);
+      }
+      throw error;
+    }
+  }
+
+  // ---- 채팅과 은행잎 --------------------------------------------------------
+  if (path.startsWith("/api/chat") || path.startsWith("/api/leaves")) {
+    try {
+      if (path === "/api/leaves/ledger") {
+        return json({ entries: await listLedger(key) });
+      }
+      const body = await readJson(request);
+      if (path === "/api/chat") {
+        return json(await readChat(key, session.channelId, body));
+      }
+      if (path === "/api/chat/send") {
+        return json(await sendChat(key, session.channelId, body), 201);
+      }
+      return json(await charge(key, body));
+    } catch (error) {
+      if (error instanceof ChatError) {
         return json({ error: error.code }, error.status);
       }
       throw error;
