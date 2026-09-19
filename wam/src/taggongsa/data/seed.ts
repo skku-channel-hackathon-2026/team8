@@ -381,7 +381,7 @@ export function buildSeed(base = Date.now()) {
       id: 't2',
       title: '학식 줄 대신 서 주실 분',
       detail:
-        '14:15에 수업이 끝나자마자 먹을 수 있게 13:55쯤부터 줄을 서 주세요. 제 식권은 미리 사둘게요.',
+        '수업 끝나자마자 먹을 수 있게 마감 20분 전쯤부터 줄을 서 주세요. 제 식권은 미리 사둘게요.',
       place: '학생회관 식당',
       deadline: ahead('14:15', base),
       duration: 20,
@@ -408,7 +408,7 @@ export function buildSeed(base = Date.now()) {
       id: 't4',
       title: '사물함에서 교재 전달',
       detail:
-        '법학관 4층 사물함에서 민법 교재를 꺼내 14:45 수업 끝날 때 강의실 앞으로 가져다 주세요. 비밀번호는 수락 후 알려드려요.',
+        '법학관 4층 사물함에서 민법 교재를 꺼내 수업 끝날 때 강의실 앞으로 가져다 주세요. 비밀번호는 수락 후 알려드려요.',
       place: '법학관 4층',
       deadline: ahead('14:45', base),
       duration: 15,
@@ -477,7 +477,7 @@ export function buildSeed(base = Date.now()) {
     {
       id: 't9',
       title: '택배 하나 대신 부쳐 주세요',
-      detail: '상자 하나만 부치면 돼요. 우체국이 13:30에 문을 닫아서 급해요.',
+      detail: '상자 하나만 부치면 돼요. 우체국 문 닫기 전에 가야 해서 급해요.',
       place: '학생회관 우체국',
       deadline: ahead('13:30', base),
       duration: 30,
