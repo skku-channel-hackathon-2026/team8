@@ -150,36 +150,43 @@ export async function extractTimetable(
 ): Promise<NormalizedResult> {
   let response;
   try {
-    response = await client.beta.messages.parse({
-      model: MODEL,
-      max_tokens: 16000,
-      betas: ["server-side-fallback-2026-07-01"],
-      fallbacks: "default",
-      system: SYSTEM_PROMPT,
-      output_config: { format: betaZodOutputFormat(ExtractionSchema) },
-      messages: [
-        {
-          role: "user",
-          content: [
-            {
-              type: "image",
-              source: {
-                type: "base64",
-                media_type: image.mediaType,
-                data: image.data,
+    // 스트리밍으로 받는다. 이미지 + 확장 사고가 붙은 turn은 길어질 수 있고,
+    // 논스트리밍 요청은 그동안 연결이 끊겨 ai_failed로 떨어진다.
+    // finalMessage()는 parse()와 같은 parsed_output을 돌려준다.
+    response = await client.beta.messages
+      .stream({
+        model: MODEL,
+        max_tokens: 16000,
+        betas: ["server-side-fallback-2026-07-01"],
+        fallbacks: "default",
+        system: SYSTEM_PROMPT,
+        output_config: { format: betaZodOutputFormat(ExtractionSchema) },
+        messages: [
+          {
+            role: "user",
+            content: [
+              {
+                type: "image",
+                source: {
+                  type: "base64",
+                  media_type: image.mediaType,
+                  data: image.data,
+                },
               },
-            },
-            {
-              type: "text",
-              text: "이 시간표에 있는 수업 칸을 모두 옮겨 적어 주세요.",
-            },
-          ],
-        },
-      ],
-    });
+              {
+                type: "text",
+                text: "이 시간표에 있는 수업 칸을 모두 옮겨 적어 주세요.",
+              },
+            ],
+          },
+        ],
+      })
+      .finalMessage();
   } catch (error) {
     if (error instanceof Anthropic.AuthenticationError) {
-      throw new TimetableAiError("ai_not_configured", 503);
+      // 키가 아예 없는 경우(ai_not_configured)와 구분한다.
+      // 이 코드가 보이면 키는 설정됐지만 Anthropic이 거부한 것이다.
+      throw new TimetableAiError("ai_key_rejected", 503);
     }
     if (error instanceof Anthropic.RateLimitError) {
       throw new TimetableAiError("busy", 429);
