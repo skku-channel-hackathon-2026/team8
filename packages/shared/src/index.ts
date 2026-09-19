@@ -96,6 +96,14 @@ export const ClassBlockSchema = z.object({
 
 export type ClassBlock = z.infer<typeof ClassBlockSchema>;
 
+/** 가입과 튜토리얼 단계 보상. 잔액을 바꾸므로 서버가 갖는다. */
+export const SIGNUP_BONUS = 10;
+export const STEP_REWARDS = [5, 10, 10, 10] as const;
+
+export const CompleteStepInputSchema = z.object({
+  step: z.number().int().min(0).max(3),
+});
+
 export const SignupInputSchema = z.object({
   nickname: z.string().trim().min(2).max(10),
   department: z.string().trim().min(1).max(40),
@@ -124,6 +132,8 @@ export const ProfileSchema = z.object({
   tone: z.number().int(),
   leaves: z.number().int(),
   timetable: z.array(ClassBlockSchema),
+  /** 튜토리얼 0~3단계를 끝냈는지. 보상을 두 번 주지 않으려고 서버가 갖는다. */
+  steps: z.array(z.boolean()).length(4).default([false, false, false, false]),
   createdAt: z.number().int(),
 });
 
@@ -365,3 +375,24 @@ export const SendChatInputSchema = z.object({
 });
 
 export const ChatHistoryInputSchema = z.object({ chatId: ChatIdSchema });
+
+// ---------------------------------------------------------------------------
+// 한 번에 받아오는 스냅샷
+//
+// 화면 다섯 개가 저마다 목록을 부르면 새로 고칠 때마다 요청이 여덟 번 나간다.
+// 대신 서버가 "지금 이 사람이 볼 수 있는 모든 것"을 한 응답에 담는다.
+// ---------------------------------------------------------------------------
+
+export const SnapshotSchema = z.object({
+  profile: ProfileSchema.nullable(),
+  students: z.array(PeerSchema),
+  missions: z.array(MissionSchema),
+  submissions: z.array(SubmissionSchema),
+  rooms: z.array(RoomSchema),
+  requests: z.array(MeetRequestSchema),
+  tasks: z.array(TaskSchema),
+  ledger: z.array(LedgerEntrySchema),
+  messages: z.array(ChatMessageSchema),
+});
+
+export type Snapshot = z.infer<typeof SnapshotSchema>;

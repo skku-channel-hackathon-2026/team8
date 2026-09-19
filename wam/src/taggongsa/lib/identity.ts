@@ -22,14 +22,30 @@ export type IdentityState =
   | { status: 'ready'; identity: ChannelIdentity }
   | { status: 'error'; message: string }
 
-/** pnpm dev:wam으로 화면만 볼 때 쓰는 미리보기 신원. */
-const LOCAL_IDENTITY: ChannelIdentity = {
-  channelId: 'local-preview',
-  managerId: 'local-preview-manager',
-  chatId: '',
-  chatType: '',
-  sessionToken: '',
-  source: 'local',
+/**
+ * pnpm dev:wam으로 화면만 볼 때 쓰는 미리보기 신원.
+ *
+ * 주소에 `?as=이름`을 붙이면 그 이름이 곧 사람이 된다. 창을 두 개 열어
+ * 한쪽은 `?as=sunbae`, 한쪽은 `?as=sinip`으로 두면 혼자서도 헌내기와
+ * 새내기가 주고받는 것을 볼 수 있다. 서버도 localhost에서만 이 토큰을
+ * 받아들인다 — 배포된 주소에서는 채널톡의 서명 토큰만 통한다.
+ */
+function localIdentity(): ChannelIdentity {
+  let who = ''
+  try {
+    who = new URLSearchParams(window.location.search).get('as') ?? ''
+  } catch {
+    who = ''
+  }
+  const managerId = who.trim().slice(0, 40) || 'local-preview-manager'
+  return {
+    channelId: 'local-preview',
+    managerId,
+    chatId: '',
+    chatType: '',
+    sessionToken: `local:${managerId}`,
+    source: 'local',
+  }
 }
 
 function inChannelHost(): boolean {
@@ -71,7 +87,7 @@ export function useChannelIdentity(): IdentityState {
     }
 
     if (!inChannelHost()) {
-      return { status: 'ready', identity: LOCAL_IDENTITY }
+      return { status: 'ready', identity: localIdentity() }
     }
 
     // Desk 안인데 신원이 없으면 남의 기록을 건드릴 수 있으므로 진행하지 않는다.

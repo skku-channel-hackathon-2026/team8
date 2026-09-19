@@ -39,11 +39,9 @@ export function ChatScreen({ chatId }: { chatId: string }) {
         .sort((a, b) => a.at - b.at),
     [state.chatMessages, chatId]
   )
-  const waiting = state.chatPending.some((p) => p.chatId === chatId)
-
   useEffect(() => {
     listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
-  }, [messages.length, waiting])
+  }, [messages.length])
 
   const send = () => {
     const value = text.trim()
@@ -122,7 +120,7 @@ export function ChatScreen({ chatId }: { chatId: string }) {
         ref={listRef}
         className="tg-chat__list"
       >
-        {messages.length === 0 && !waiting && (
+        {messages.length === 0 && (
           <p className="tg-chat__hint">
             첫 메시지를 보내 보세요.
             {peer ? ` ${peer.nickname}님에게 바로 전달돼요.` : ''}
@@ -164,15 +162,6 @@ export function ChatScreen({ chatId }: { chatId: string }) {
             </div>
           )
         })}
-        {waiting && (
-          <div className="tg-bubblerow">
-            <span className="tg-bubble tg-bubble--typing">
-              <i />
-              <i />
-              <i />
-            </span>
-          </div>
-        )}
       </div>
 
       <div className="tg-chat__input">

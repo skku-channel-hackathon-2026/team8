@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import { SIGNUP_BONUS, STEP_REWARDS } from "@tutorial/shared";
 import { handleApiRequest } from "./api.js";
 import {
   withDatabase,
@@ -147,7 +148,8 @@ test("the profile id comes from the session, not the request body", async () => 
   const body = (await response?.json()) as { profile: Record<string, unknown> };
   assert.equal(body.profile.id, "local-preview:local-preview-manager");
   assert.equal(body.profile.managerId, "local-preview-manager");
-  assert.equal(body.profile.leaves, 0);
+  // 가입 보너스는 서버가 준다.
+  assert.equal(body.profile.leaves, SIGNUP_BONUS);
 });
 
 test("signing up twice is refused", async () => {
@@ -947,4 +949,122 @@ test("an errand chat is open to the two people in it and nobody else", async () 
     201,
   );
   assert.equal((await call("nosy", "/api/chat", { chatId }))?.status, 403);
+});
+
+// ---------------------------------------------------------------------------
+// 튜토리얼 단계 보상 — 한 번만, 순서대로
+// ---------------------------------------------------------------------------
+
+test("a tutorial step pays once and only after the ones before it", async () => {
+  const database = fakeDatabase({ "user:ch1:learner": user("learner", 0) });
+  const env = { APP_SECRET: secret };
+  const call = (path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor("learner"), path, body), env),
+    );
+
+  // 0단계를 건너뛰고 1단계부터 받을 수는 없다.
+  assert.equal((await call("/api/me/step", { step: 1 }))?.status, 409);
+
+  const first = await call("/api/me/step", { step: 0 });
+  assert.equal(first?.status, 200);
+  const body = (await first?.json()) as { profile: { leaves: number } };
+  assert.equal(body.profile.leaves, STEP_REWARDS[0]);
+
+  // 같은 단계를 또 눌러도 보상은 늘지 않는다.
+  const again = await call("/api/me/step", { step: 0 });
+  const repeated = (await again?.json()) as { profile: { leaves: number } };
+  assert.equal(repeated.profile.leaves, STEP_REWARDS[0]);
+});
+
+// ---------------------------------------------------------------------------
+// 스냅샷 — 한 번에 받아오고, 볼 수 있는 것만 담긴다
+// ---------------------------------------------------------------------------
+
+test("two people in a direct chat see each other's messages", async () => {
+  const database = fakeDatabase({
+    "user:ch1:from": user("from", 0),
+    "user:ch1:to": user("to", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const sent = await call("from", "/api/requests/dm", {
+    toId: "ch1:to",
+    theme: "study",
+    message: "같이 공부해요",
+  });
+  const { request } = (await sent?.json()) as { request: { id: string } };
+  await call("to", "/api/requests/respond", {
+    requestId: request.id,
+    accept: true,
+  });
+
+  // 각자 상대를 가리키는 다른 이름으로 같은 대화를 부른다.
+  await call("from", "/api/chat/send", { chatId: "dm:ch1:to", text: "안녕" });
+  await call("to", "/api/chat/send", { chatId: "dm:ch1:from", text: "반가워" });
+
+  // 둘이 같은 대화를 보고 있다. 두 메시지가 같은 밀리초에 들어갈 수 있어
+  // 순서까지는 묶어 두지 않는다.
+  const read = await call("from", "/api/chat", { chatId: "dm:ch1:to" });
+  const history = (await read?.json()) as { messages: { text: string }[] };
+  assert.deepEqual(history.messages.map((m) => m.text).sort(), [
+    "반가워",
+    "안녕",
+  ]);
+});
+
+test("the snapshot carries what this person may see and nothing else", async () => {
+  const database = fakeDatabase({
+    "user:ch1:sunbae": senior("sunbae"),
+    "user:ch1:sinip": user("sinip", 100),
+    "user:ch1:bystander": user("bystander", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  await call("sunbae", "/api/missions/create", missionDraft);
+  await call("sinip", "/api/tasks/create", draft);
+  const created = await call("sinip", "/api/rooms/create", roomDraft);
+  const { room } = (await created?.json()) as { room: { id: string } };
+  await call("sinip", "/api/chat/send", {
+    chatId: `room:${room.id}`,
+    text: "여기서 봐요",
+  });
+
+  const mine = await call("sinip", "/api/sync");
+  assert.equal(mine?.status, 200);
+  const snapshot = (await mine?.json()) as {
+    profile: { nickname: string };
+    students: { nickname: string }[];
+    missions: unknown[];
+    tasks: unknown[];
+    rooms: unknown[];
+    messages: { text: string }[];
+    ledger: unknown[];
+  };
+  assert.equal(snapshot.profile.nickname, "sinip");
+  // 헌내기가 올린 튜토리얼이 새내기 스냅샷에 담긴다.
+  assert.equal(snapshot.missions.length, 1);
+  assert.equal(snapshot.tasks.length, 1);
+  assert.equal(snapshot.rooms.length, 1);
+  assert.deepEqual(
+    snapshot.messages.map((m) => m.text),
+    ["여기서 봐요"],
+  );
+  // 목록에 나는 빠진다.
+  assert.ok(!snapshot.students.some((s) => s.nickname === "sinip"));
+  // 보수를 예치한 내역이 남는다.
+  assert.equal(snapshot.ledger.length, 1);
+
+  // 모임에 없는 사람의 스냅샷에는 그 대화가 담기지 않는다.
+  const other = await call("bystander", "/api/sync");
+  const theirs = (await other?.json()) as { messages: unknown[] };
+  assert.equal(theirs.messages.length, 0);
 });

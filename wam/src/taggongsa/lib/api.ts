@@ -1,8 +1,10 @@
 import {
   ProfileSchema,
+  SnapshotSchema,
   type ClassBlock,
   type Profile,
   type SignupInput,
+  type Snapshot,
 } from '@tutorial/shared'
 
 /**
@@ -27,6 +29,19 @@ const MESSAGES: Record<string, string> = {
   bad_request: '입력을 다시 확인해 주세요.',
   network: '서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',
   timeout: '서버 응답이 너무 늦어요. 다시 시도해 주세요.',
+  forbidden: '권한이 없어요.',
+  insufficient_leaves: '은행잎이 부족해요. 충전 후 다시 시도해 주세요.',
+  task_changed: '방금 다른 사람이 먼저 처리했어요.',
+  task_not_found: '이미 사라진 부탁이에요.',
+  room_full: '자리가 모두 찼어요.',
+  room_not_found: '이미 사라진 모임이에요.',
+  already_requested: '이미 보낸 신청이 기다리고 있어요.',
+  request_changed: '이미 답한 신청이에요.',
+  request_not_found: '이미 사라진 신청이에요.',
+  already_submitted: '이미 낸 인증이 심사를 기다리고 있어요.',
+  submission_changed: '이미 심사가 끝난 인증이에요.',
+  mission_not_found: '이미 사라진 튜토리얼이에요.',
+  step_locked: '앞 단계를 먼저 끝내 주세요.',
 }
 
 export function apiErrorMessage(code: string): string {
@@ -76,7 +91,31 @@ function parseProfile(body: { profile: unknown }): Profile | null {
   return parsed.data
 }
 
+/** 응답 본문을 쓰지 않는 요청. 결과는 다음 스냅샷으로 확인한다. */
+function post(
+  path: string,
+  sessionToken: string,
+  body: unknown
+): Promise<unknown> {
+  return call<Record<string, unknown>>(path, sessionToken, {
+    method: 'POST',
+    body,
+  })
+}
+
 export const api = {
+  /**
+   * 지금 이 사람이 볼 수 있는 모든 것을 한 번에 받아온다.
+   * 화면마다 목록을 따로 부르지 않는 이유는 서버 sync.ts에 적어 뒀다.
+   */
+  async getSnapshot(sessionToken: string): Promise<Snapshot> {
+    const parsed = SnapshotSchema.safeParse(
+      await call<unknown>('/api/sync', sessionToken)
+    )
+    if (!parsed.success) throw new ApiError('bad_response')
+    return parsed.data
+  },
+
   async getProfile(sessionToken: string): Promise<Profile | null> {
     return parseProfile(
       await call<{ profile: unknown }>('/api/me', sessionToken)
@@ -107,4 +146,52 @@ export const api = {
     if (!profile) throw new ApiError('bad_response')
     return profile
   },
+
+  // ---- 튜토리얼 ----
+  completeStep: (token: string, step: number) =>
+    post('/api/me/step', token, { step }),
+  setShowFree: (token: string, value: boolean) =>
+    call('/api/me/show-free', token, { method: 'PUT', body: { value } }),
+  charge: (token: string, packIndex: number) =>
+    post('/api/leaves/charge', token, { packIndex }),
+
+  // ---- 튜토리얼 미션과 인증 ----
+  createMission: (token: string, draft: unknown) =>
+    post('/api/missions/create', token, draft),
+  toggleRecommend: (token: string, missionId: string) =>
+    post('/api/missions/recommend', token, { missionId }),
+  submitMission: (token: string, missionId: string, note: string) =>
+    post('/api/submissions/create', token, { missionId, note }),
+  reviewSubmission: (token: string, submissionId: string, approve: boolean) =>
+    post('/api/submissions/review', token, { submissionId, approve }),
+
+  // ---- 만남 신청과 모임방 ----
+  sendDm: (token: string, body: unknown) =>
+    post('/api/requests/dm', token, body),
+  respondRequest: (token: string, requestId: string, accept: boolean) =>
+    post('/api/requests/respond', token, { requestId, accept }),
+  createRoom: (token: string, draft: unknown) =>
+    post('/api/rooms/create', token, draft),
+  joinRoom: (token: string, roomId: string) =>
+    post('/api/rooms/join', token, { roomId }),
+  leaveRoom: (token: string, roomId: string) =>
+    post('/api/rooms/leave', token, { roomId }),
+  invite: (token: string, roomId: string, toIds: string[]) =>
+    post('/api/rooms/invite', token, { roomId, toIds }),
+
+  // ---- 공강 마켓 ----
+  createTask: (token: string, draft: unknown) =>
+    post('/api/tasks/create', token, draft),
+  takeTask: (token: string, taskId: string) =>
+    post('/api/tasks/take', token, { taskId }),
+  reportTask: (token: string, taskId: string) =>
+    post('/api/tasks/report', token, { taskId }),
+  confirmTask: (token: string, taskId: string) =>
+    post('/api/tasks/confirm', token, { taskId }),
+  cancelTask: (token: string, taskId: string) =>
+    post('/api/tasks/cancel', token, { taskId }),
+
+  // ---- 채팅 ----
+  sendChat: (token: string, chatId: string, text: string) =>
+    post('/api/chat/send', token, { chatId, text }),
 }

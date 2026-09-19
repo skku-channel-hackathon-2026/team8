@@ -1,9 +1,12 @@
 import {
+  CompleteStepInputSchema,
   ProfileSchema,
+  SIGNUP_BONUS,
+  STEP_REWARDS,
   ShowFreeInputSchema,
   SignupInputSchema,
   TimetableInputSchema,
-  type Peer,
+  type LedgerEntry,
   type Profile,
 } from "@tutorial/shared";
 import { ChatError, charge, listLedger, readChat, sendChat } from "./chat.js";
@@ -36,7 +39,8 @@ import {
   reportTask,
   takeTask,
 } from "./market.js";
-import { getRecord, listRecords, putRecord } from "./records.js";
+import { getRecord, putRecord } from "./records.js";
+import { buildSnapshot, listStudents } from "./sync.js";
 import { readWamSessionToken, type WamSession } from "./wam-session.js";
 
 /**
@@ -77,11 +81,31 @@ const LOCAL_SESSION: WamSession = {
   expiresAt: 0,
 };
 
+const LOCAL_PREFIX = "local:";
+
+/**
+ * 로컬에서 여러 사람인 척한다.
+ *
+ * 창을 두 개 열어도 주소가 같으면 서버는 둘을 한 사람으로 본다. 그러면
+ * 새내기와 헌내기가 주고받는 것을 혼자서는 볼 수 없다. 그래서 localhost에
+ * 한해 `local:<이름>` 토큰으로 사람을 나눈다.
+ *
+ * 이 길은 isLocal 안에서만 열린다. 배포된 주소에서는 서명 토큰만 통한다.
+ */
+function localSession(header: string): WamSession {
+  if (!header.startsWith(LOCAL_PREFIX)) return LOCAL_SESSION;
+  const managerId = header.slice(LOCAL_PREFIX.length).trim().slice(0, 40);
+  if (!managerId) return LOCAL_SESSION;
+  return { channelId: LOCAL_SESSION.channelId, managerId, expiresAt: 0 };
+}
+
 export function readSession(
   request: Request,
   env: ApiEnv,
 ): WamSession | undefined {
-  if (isLocal(new URL(request.url))) return LOCAL_SESSION;
+  if (isLocal(new URL(request.url))) {
+    return localSession(request.headers.get(SESSION_HEADER) ?? "");
+  }
   if (!env.APP_SECRET) return undefined;
   const session = readWamSessionToken(
     request.headers.get(SESSION_HEADER) ?? "",
@@ -103,22 +127,27 @@ function hashString(value: string): number {
   return hash;
 }
 
-function toPeer(profile: Profile): Peer {
-  const {
-    managerId: _m,
-    channelId: _c,
-    leaves: _l,
-    createdAt: _t,
-    ...peer
-  } = profile;
-  return peer;
-}
-
 async function loadProfile(session: WamSession): Promise<Profile | null> {
   const stored = await getRecord<unknown>("user", userKey(session));
   if (!stored) return null;
   const parsed = ProfileSchema.safeParse(stored);
   return parsed.success ? parsed.data : null;
+}
+
+/** 은행잎이 움직인 자리마다 내역을 한 줄 남긴다. */
+async function addEntry(
+  userId: string,
+  delta: number,
+  label: string,
+): Promise<void> {
+  const entry: LedgerEntry = {
+    id: `lg_${Date.now().toString(36)}${Math.random().toString(36).slice(2, 8)}`,
+    userId,
+    delta,
+    label,
+    at: Date.now(),
+  };
+  await putRecord("ledger", entry.id, entry);
 }
 
 async function readJson(request: Request): Promise<unknown> {
@@ -134,7 +163,9 @@ async function readJson(request: Request): Promise<unknown> {
  * 흘려보낸다. 그러지 않으면 기존 /api/health 같은 경로를 삼켜 버린다.
  */
 const ROUTES: Record<string, string> = {
+  "/api/sync": "GET",
   "/api/me": "GET",
+  "/api/me/step": "POST",
   "/api/me/signup": "POST",
   "/api/me/timetable": "PUT",
   "/api/me/show-free": "PUT",
@@ -181,6 +212,12 @@ export async function handleApiRequest(
   if (!session) return json({ error: "unauthorized" }, 401);
   const key = userKey(session);
 
+  // ---- 한 번에 받아오는 스냅샷 ---------------------------------------------
+  // 화면들이 저마다 목록을 부르지 않게, 볼 수 있는 모든 것을 한 응답에 담는다.
+  if (path === "/api/sync") {
+    return json(await buildSnapshot(key, session.channelId));
+  }
+
   // ---- 내 프로필 ----------------------------------------------------------
   if (path === "/api/me") {
     return json({ profile: await loadProfile(session) });
@@ -203,11 +240,13 @@ export async function handleApiRequest(
       role: input.data.role,
       showFree: true,
       tone: hashString(input.data.nickname) % AVATAR_TONES,
-      leaves: 0,
+      leaves: SIGNUP_BONUS,
       timetable: [],
+      steps: [false, false, false, false],
       createdAt: Date.now(),
     };
     await putRecord("user", key, profile);
+    await addEntry(key, SIGNUP_BONUS, "가입 축하 은행잎");
     return json({ profile }, 201);
   }
 
@@ -219,6 +258,33 @@ export async function handleApiRequest(
 
     const next: Profile = { ...profile, timetable: input.data.blocks };
     await putRecord("user", key, next);
+    return json({ profile: next });
+  }
+
+  if (path === "/api/me/step") {
+    const profile = await loadProfile(session);
+    if (!profile) return json({ error: "not_signed_up" }, 404);
+    const input = CompleteStepInputSchema.safeParse(await readJson(request));
+    if (!input.success) return json({ error: "bad_request" }, 400);
+
+    const step = input.data.step;
+    // 앞 단계를 건너뛰고 보상만 받아 가지 못하게 한다.
+    if (profile.steps.slice(0, step).some((done) => !done)) {
+      return json({ error: "step_locked" }, 409);
+    }
+    // 같은 단계로 두 번 받지 못하게 한다.
+    if (profile.steps[step]) return json({ profile });
+
+    const steps = [...profile.steps];
+    steps[step] = true;
+    const reward = STEP_REWARDS[step];
+    const next: Profile = {
+      ...profile,
+      steps,
+      leaves: profile.leaves + reward,
+    };
+    await putRecord("user", key, next);
+    await addEntry(key, reward, `튜토리얼 ${step}단계`);
     return json({ profile: next });
   }
 
@@ -342,16 +408,5 @@ export async function handleApiRequest(
   }
 
   // ---- 공강 매칭용 학생 목록 ----------------------------------------------
-  const stored = await listRecords<unknown>("user");
-  const peers: Peer[] = [];
-  for (const row of stored) {
-    const parsed = ProfileSchema.safeParse(row);
-    if (!parsed.success) continue;
-    // 같은 채널 안에서만, 공개한 사람만, 나는 빼고
-    if (parsed.data.channelId !== session.channelId) continue;
-    if (!parsed.data.showFree) continue;
-    if (parsed.data.id === key) continue;
-    peers.push(toPeer(parsed.data));
-  }
-  return json({ students: peers });
+  return json({ students: await listStudents(key, session.channelId) });
 }

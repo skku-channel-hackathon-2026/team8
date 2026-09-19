@@ -57,7 +57,6 @@ export interface Submission {
   status: SubmissionStatus
   reviewerId?: string
   createdAt: number
-  resolveAt?: number
 }
 
 export type RequestStatus = 'pending' | 'accepted' | 'declined'
@@ -72,7 +71,6 @@ export interface MeetRequest {
   roomId?: string
   status: RequestStatus
   createdAt: number
-  resolveAt?: number
 }
 
 export interface Room {
@@ -105,7 +103,6 @@ export interface Task {
   workerId?: string
   status: TaskStatus
   createdAt: number
-  autoAt?: number
 }
 
 export interface LedgerEntry {
@@ -115,10 +112,7 @@ export interface LedgerEntry {
   at: number
 }
 
-/**
- * chatId 형식: `dm:<상대ID>` · `room:<모임ID>` · `task:<부탁ID>`.
- * 실제 서버 채팅 대신, 상대의 응답을 tick()에서 흉내 낸다.
- */
+/** chatId 형식: `dm:<상대ID>` · `room:<모임ID>` · `task:<부탁ID>` */
 export interface ChatMessage {
   id: string
   chatId: string
@@ -146,11 +140,6 @@ export interface AppNotification {
   at: number
   read: boolean
   link?: NotificationLink
-}
-
-export interface ChatPending {
-  chatId: string
-  at: number
 }
 
 export type ToastTone = 'default' | 'leaf'
