@@ -1,34 +1,24 @@
 import { useState } from 'react'
 import { useApp, useMe, useNav } from '../store/context'
-import { DEFAULT_CLOCK, ME, findPerson } from '../store/state'
+import { ME, findPerson } from '../store/state'
 import { useTheme } from '../store/theme'
 import {
   CAMPUS_LABEL,
   MISSION_CATEGORY_LABEL,
   ROLE_LABEL,
 } from '../data/labels'
-import type { ClockSetting, Mission, Submission } from '../types'
+import type { Mission, Submission } from '../types'
 import { cx } from '../lib/cx'
-import {
-  DAY_LABELS,
-  describeFree,
-  fmt,
-  getFreeState,
-  momentFromDate,
-  parseHM,
-  timeAgo,
-} from '../lib/time'
+import { describeFree, getFreeState, timeAgo } from '../lib/time'
 import { Icon } from '../ui/Icon'
 import { Leaf } from '../ui/Mascot'
 import {
   Avatar,
   Button,
   Card,
-  Field,
   LeafAmount,
   RoleChip,
   SectionHead,
-  Segmented,
   Sheet,
   StatusDot,
   Switch,
@@ -116,102 +106,6 @@ export function ChargeSheet({ onClose }: { onClose: () => void }) {
           />
           데모 버전이라 실제 결제는 일어나지 않고 은행잎만 채워져요.
         </div>
-      </div>
-    </Sheet>
-  )
-}
-
-export function ClockSheet({ onClose }: { onClose: () => void }) {
-  const { state, dispatch } = useApp()
-  const [draft, setDraft] = useState<ClockSetting>(state.clock)
-  const [time, setTime] = useState(fmt(state.clock.minutes))
-  const minutes = parseHM(time)
-  const real = momentFromDate(new Date())
-
-  return (
-    <Sheet
-      title="기준 시각"
-      onClose={onClose}
-      footer={
-        <>
-          <Button
-            variant="outline"
-            onClick={() => {
-              setDraft(DEFAULT_CLOCK)
-              setTime(fmt(DEFAULT_CLOCK.minutes))
-            }}
-          >
-            초기화
-          </Button>
-          <Button
-            className="tg-grow"
-            variant="dark"
-            disabled={draft.mode === 'demo' && minutes === null}
-            onClick={() => {
-              dispatch({
-                type: 'SET_CLOCK',
-                clock: { ...draft, minutes: minutes ?? draft.minutes },
-              })
-              onClose()
-            }}
-          >
-            적용하기
-          </Button>
-        </>
-      }
-    >
-      <div className="tg-stack">
-        <p className="tg-body">
-          공강 여부는 기준 시각으로 계산해요. 주말이나 밤에 시연할 때는 평일 낮
-          시각을 골라 주세요.
-        </p>
-        <Segmented
-          label="시각 기준"
-          value={draft.mode}
-          onChange={(mode) => setDraft({ ...draft, mode })}
-          options={[
-            { value: 'demo', label: '데모 시각' },
-            { value: 'real', label: '실제 시각' },
-          ]}
-        />
-        {draft.mode === 'demo' ? (
-          <>
-            <div className="tg-field">
-              <span className="tg-label">요일</span>
-              <div className="tg-daypick tg-daypick--7">
-                {DAY_LABELS.map((label, index) => (
-                  <button
-                    key={label}
-                    type="button"
-                    aria-pressed={draft.day === index}
-                    onClick={() => setDraft({ ...draft, day: index })}
-                  >
-                    {label}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <Field label="시각">
-              {(id) => (
-                <input
-                  id={id}
-                  type="time"
-                  className="tg-input"
-                  value={time}
-                  step={300}
-                  onChange={(event) => setTime(event.target.value)}
-                />
-              )}
-            </Field>
-          </>
-        ) : (
-          <Card tone="tan">
-            <p className="tg-strong">
-              지금 {DAY_LABELS[real.day]}요일 {fmt(real.minutes)}
-            </p>
-            <p className="tg-caption">기기의 현재 시각을 그대로 써요</p>
-          </Card>
-        )}
       </div>
     </Sheet>
   )
@@ -552,23 +446,6 @@ export function MyPage() {
               onChange={(value) => setPref(value ? 'dark' : 'light')}
             />
           </div>
-          <button
-            type="button"
-            className="tg-listitem tg-checkrow"
-            onClick={() => openSheet('clock')}
-          >
-            <Icon name="clock" />
-            <span className="tg-grow tg-strong">기준 시각</span>
-            <span className="tg-caption">
-              {state.clock.mode === 'demo'
-                ? `데모 · ${DAY_LABELS[state.clock.day]} ${fmt(state.clock.minutes)}`
-                : '실제 시각'}
-            </span>
-            <Icon
-              name="chevron"
-              size={16}
-            />
-          </button>
           <button
             type="button"
             className="tg-listitem tg-checkrow"

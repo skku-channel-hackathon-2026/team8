@@ -21,7 +21,7 @@ export function AppProvider({
   children: ReactNode
 }) {
   const [state, dispatch] = useReducer(reducer, identity, loadInitial)
-  const [realNow, setRealNow] = useState(() => new Date())
+  const [now, setNow] = useState(() => momentFromDate(new Date()))
   const scope = scopeOf(identity)
 
   useEffect(() => {
@@ -38,17 +38,14 @@ export function AppProvider({
     return () => window.clearInterval(timer)
   }, [])
 
+  // 지금이 공강인지 판단하는 기준 시각. 30초마다 실제 시각으로 갱신한다.
   useEffect(() => {
-    if (state.clock.mode !== 'real') return
-    const timer = window.setInterval(() => setRealNow(new Date()), 30_000)
+    const timer = window.setInterval(
+      () => setNow(momentFromDate(new Date())),
+      30_000
+    )
     return () => window.clearInterval(timer)
-  }, [state.clock.mode])
-
-  const { mode, day, minutes } = state.clock
-  const now = useMemo(
-    () => (mode === 'demo' ? { day, minutes } : momentFromDate(realNow)),
-    [mode, day, minutes, realNow]
-  )
+  }, [])
 
   const value = useMemo(
     () => ({ state, dispatch, now, me: state.profile, identity }),
