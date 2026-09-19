@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import type Anthropic from "@anthropic-ai/sdk";
+import Anthropic from "@anthropic-ai/sdk";
 import { handleTimetableRequest, normalizeClasses } from "./timetable-ai.js";
 import { createWamSessionToken, readWamSessionToken } from "./wam-session.js";
 
@@ -87,4 +87,101 @@ test("a missing API key is reported instead of calling the model", async () => {
   );
   assert.equal(response.status, 503);
   assert.deepEqual(await response.json(), { error: "ai_not_configured" });
+});
+
+test("a local request with a key reaches the model and normalizes the result", async () => {
+  let sentModel = "";
+  const fakeClient = {
+    beta: {
+      messages: {
+        stream(params: { model: string }) {
+          sentModel = params.model;
+          return {
+            finalMessage: async () => ({
+              stop_reason: "end_turn",
+              parsed_output: {
+                isTimetable: true,
+                classes: [
+                  {
+                    name: "경영학원론",
+                    day: "수",
+                    start: "10:30",
+                    end: "11:45",
+                    room: "33101",
+                  },
+                ],
+              },
+            }),
+          };
+        },
+      },
+    },
+  } as unknown as Anthropic;
+
+  const response = await handleTimetableRequest(
+    post("http://127.0.0.1:8787/api/timetable/parse"),
+    { APP_SECRET: secret, ANTHROPIC_API_KEY: "key" },
+    () => fakeClient,
+  );
+
+  assert.equal(sentModel, "claude-opus-5");
+  assert.equal(response.status, 200);
+  assert.deepEqual(await response.json(), {
+    classes: [
+      { name: "경영학원론", day: 2, start: 630, end: 705, room: "33101" },
+    ],
+    skipped: 0,
+  });
+});
+
+test("an image the model does not read as a timetable is reported", async () => {
+  const fakeClient = {
+    beta: {
+      messages: {
+        stream: () => ({
+          finalMessage: async () => ({
+            stop_reason: "end_turn",
+            parsed_output: { isTimetable: false, classes: [] },
+          }),
+        }),
+      },
+    },
+  } as unknown as Anthropic;
+
+  const response = await handleTimetableRequest(
+    post("http://127.0.0.1:8787/api/timetable/parse"),
+    { APP_SECRET: secret, ANTHROPIC_API_KEY: "key" },
+    () => fakeClient,
+  );
+
+  assert.equal(response.status, 422);
+  assert.deepEqual(await response.json(), { error: "not_timetable" });
+});
+
+test("a rejected API key is reported separately from a missing one", async () => {
+  const fakeClient = {
+    beta: {
+      messages: {
+        stream: () => ({
+          finalMessage: async () => {
+            throw new Anthropic.AuthenticationError(
+              401,
+              undefined,
+              "bad key",
+              new Headers(),
+            );
+          },
+        }),
+      },
+    },
+  } as unknown as Anthropic;
+
+  const response = await handleTimetableRequest(
+    post("http://127.0.0.1:8787/api/timetable/parse"),
+    { APP_SECRET: secret, ANTHROPIC_API_KEY: "key" },
+    () => fakeClient,
+  );
+
+  assert.equal(response.status, 503);
+  assert.deepEqual(await response.json(), { error: "ai_key_rejected" });
 });

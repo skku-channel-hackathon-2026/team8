@@ -3,6 +3,8 @@ import { uid } from './id'
 
 const ENDPOINT = '/api/timetable/parse'
 const MAX_EDGE = 2000
+/** 서버가 스트리밍으로 받아도 이미지 한 장은 이 안에 끝난다. */
+const TIMEOUT_MS = 180_000
 
 export class TimetableAiError extends Error {
   constructor(readonly code: string) {
@@ -13,6 +15,8 @@ export class TimetableAiError extends Error {
 const MESSAGES: Record<string, string> = {
   ai_not_configured:
     'AI 시간표 인식이 아직 켜지지 않았어요. 운영진이 AI 키를 등록하면 쓸 수 있어요. 지금은 직접 입력해 주세요.',
+  ai_key_rejected:
+    'AI 키가 거부됐어요. 운영진에게 키를 확인해 달라고 알려 주세요. 지금은 직접 입력해 주세요.',
   unauthorized: '채널톡에서 앱을 다시 열고 시도해 주세요.',
   not_timetable: '시간표 이미지가 아닌 것 같아요. 시간표 화면을 캡처해 주세요.',
   no_classes:
@@ -21,6 +25,8 @@ const MESSAGES: Record<string, string> = {
   too_large: '이미지가 너무 커요. 화면 캡처 한 장으로 올려 주세요.',
   bad_image: '이미지를 읽을 수 없어요. PNG나 JPG로 다시 올려 주세요.',
   refused: '이 이미지는 처리할 수 없어요. 시간표 캡처만 올려 주세요.',
+  network: '서버에 연결하지 못했어요. 잠시 후 다시 시도해 주세요.',
+  timeout: '시간표를 읽는 데 너무 오래 걸렸어요. 다시 시도해 주세요.',
 }
 
 export function aiErrorMessage(code: string): string {
@@ -81,6 +87,10 @@ export async function recognizeTimetable(
 ): Promise<{ classes: ClassBlock[]; skipped: number }> {
   const image = await encodeImage(file)
 
+  // 응답이 오지 않으면 화면이 '읽는 중'에 영원히 머무르므로 스스로 끊는다.
+  const controller = new AbortController()
+  const timer = window.setTimeout(() => controller.abort(), TIMEOUT_MS)
+
   let response: Response
   try {
     response = await fetch(ENDPOINT, {
@@ -90,9 +100,14 @@ export async function recognizeTimetable(
         ...(sessionToken ? { 'x-taggongsa-session': sessionToken } : {}),
       },
       body: JSON.stringify(image),
+      signal: controller.signal,
     })
   } catch {
-    throw new TimetableAiError('network')
+    throw new TimetableAiError(
+      controller.signal.aborted ? 'timeout' : 'network'
+    )
+  } finally {
+    window.clearTimeout(timer)
   }
 
   const body = (await response.json().catch(() => null)) as {

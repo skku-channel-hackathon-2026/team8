@@ -7,7 +7,10 @@ if (!/^http:\/\/(127\.0\.0\.1|localhost):\d+$/.test(origin)) {
 for (const path of ["/api/health", "/api/ready"]) {
   const response = await fetch(origin + path);
   assert.equal(response.status, 200);
-  assert.deepEqual(await response.json(), { ok: true });
+  const body = await response.json();
+  assert.equal(body.ok, true);
+  // /api/ready는 AI 키 설정 여부도 알린다. 값은 환경마다 다르다.
+  if (path === "/api/ready") assert.equal(typeof body.ai, "boolean");
 }
 const body =
   '{ "method": "extension.command.metadata.getCommands", "params": {} }';

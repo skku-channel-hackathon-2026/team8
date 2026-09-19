@@ -145,6 +145,8 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
   const [editing, setEditing] = useState<ClassBlock | null>(null)
   const [error, setError] = useState('')
+  // 실패 원인을 Desk에서도 구분할 수 있게 코드를 함께 보여 준다.
+  const [errorCode, setErrorCode] = useState('')
 
   useEffect(() => {
     return () => {
@@ -156,9 +158,11 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
     if (!file) return
     if (!file.type.startsWith('image/')) {
       setError('이미지 파일만 올릴 수 있어요')
+      setErrorCode('')
       return
     }
     setError('')
+    setErrorCode('')
     setPreview(URL.createObjectURL(file))
     setPhase('scanning')
     try {
@@ -171,11 +175,9 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
       setExcluded(new Set())
       setPhase('result')
     } catch (caught) {
-      setError(
-        aiErrorMessage(
-          caught instanceof TimetableAiError ? caught.code : 'failed'
-        )
-      )
+      const code = caught instanceof TimetableAiError ? caught.code : 'failed'
+      setError(aiErrorMessage(code))
+      setErrorCode(code)
       setPreview(null)
       setPhase('pick')
     }
@@ -266,13 +268,18 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
               />
             </label>
             {error && (
-              <div className="tg-banner tg-banner--error">
-                <Icon
-                  name="bell"
-                  size={16}
-                />
-                {error}
-              </div>
+              <>
+                <div className="tg-banner tg-banner--error">
+                  <Icon
+                    name="bell"
+                    size={16}
+                  />
+                  {error}
+                </div>
+                {errorCode && (
+                  <p className="tg-caption">오류 코드: {errorCode}</p>
+                )}
+              </>
             )}
             <p className="tg-caption">
               잘 읽히는 이미지: 시간표 전체가 한 화면에 보이고, 과목명과 강의실
