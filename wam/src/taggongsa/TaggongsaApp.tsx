@@ -15,6 +15,7 @@ import type { Toast } from './types'
 import { useChannelIdentity } from './lib/identity'
 import { loadThemePref, saveThemePref, type ThemePref } from './lib/theme'
 import { useKeyboardAwareViewport } from './lib/viewport'
+import { bootChannelTalk, openChannelTalk } from './lib/channelTalk'
 import { Icon } from './ui/Icon'
 import { Leaf, Mascot } from './ui/Mascot'
 import { Empty, IconButton } from './ui/primitives'
@@ -170,12 +171,20 @@ function Shell() {
     me?.role === 'fresh' &&
     !state.tutorial.introSkipped &&
     !state.tutorial.done.slice(0, 4).every(Boolean)
-  const closeButton = (
-    <IconButton
-      icon="close"
-      label="닫기"
-      onClick={close}
-    />
+  // 헤더 오른쪽 끝, 닫기 버튼 앞에 둔다. 모든 화면에서 같은 자리다.
+  const headerActions = (
+    <>
+      <IconButton
+        icon="chat"
+        label="채널톡 문의"
+        onClick={openChannelTalk}
+      />
+      <IconButton
+        icon="close"
+        label="닫기"
+        onClick={close}
+      />
+    </>
   )
 
   if (!me) {
@@ -183,7 +192,7 @@ function Shell() {
       <NavContext.Provider value={nav}>
         <header className="tg-header">
           <span className="tg-header__spacer" />
-          {closeButton}
+          {headerActions}
         </header>
         {onboard === 'welcome' && (
           <Welcome
@@ -248,7 +257,7 @@ function Shell() {
             </button>
           </>
         )}
-        {closeButton}
+        {headerActions}
       </header>
 
       <div
@@ -304,6 +313,10 @@ export default function TaggongsaApp() {
   useEffect(() => {
     setSize(WAM_SIZE)
   }, [setSize])
+
+  useEffect(() => {
+    bootChannelTalk()
+  }, [])
 
   useEffect(() => {
     saveThemePref(pref)
