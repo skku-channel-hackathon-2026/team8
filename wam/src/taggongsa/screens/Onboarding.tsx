@@ -1,5 +1,6 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { useApp } from '../store/context'
+import { useProfileSync } from '../store/sync'
 import type { AppState } from '../store/state'
 import { DEPARTMENTS_BY_CAMPUS } from '../data/departments'
 import {
@@ -216,6 +217,7 @@ const NICK_MAX = 10
 
 export function Signup({ onBack }: { onBack: () => void }) {
   const { dispatch, identity } = useApp()
+  const sync = useProfileSync()
   const scope = scopeOf(identity)
   const [step, setStep] = useState(0)
   const [role, setRole] = useState<Role | null>(null)
@@ -259,6 +261,12 @@ export function Signup({ onBack }: { onBack: () => void }) {
     if (role && campus) {
       dispatch({
         type: 'SIGN_UP',
+        role,
+        campus,
+        department,
+        nickname: trimmedNick,
+      })
+      void sync.signup({
         role,
         campus,
         department,
