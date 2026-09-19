@@ -421,3 +421,188 @@ test("cancelling an open task refunds the escrow", async () => {
   const body = (await cancelled?.json()) as { leaves: number };
   assert.equal(body.leaves, 100);
 });
+
+// ---------------------------------------------------------------------------
+// 튜토리얼 미션과 인증 — 보상 금액과 심사 결과를 서버가 정한다
+// ---------------------------------------------------------------------------
+
+const missionDraft = {
+  title: "학생식당 가보기",
+  description: "",
+  proof: "식판 사진",
+  category: "campus",
+  reward: 9999, // 클라이언트가 보낸 보상은 무시돼야 한다
+};
+
+function senior(managerId: string, leaves = 0) {
+  return { ...user(managerId, leaves), role: "senior" };
+}
+
+test("the server sets the reward and ignores what the client asked for", async () => {
+  const database = fakeDatabase({ "user:ch1:sunbae": senior("sunbae") });
+  const env = { APP_SECRET: secret };
+
+  const created = await withDatabase(database, () =>
+    handleApiRequest(
+      asUser(tokenFor("sunbae"), "/api/missions/create", missionDraft),
+      env,
+    ),
+  );
+  assert.equal(created?.status, 201);
+  const body = (await created?.json()) as {
+    mission: { reward: number; authorId: string };
+    leaves: number | null;
+  };
+  assert.equal(body.mission.reward, 10);
+  assert.equal(body.mission.authorId, "ch1:sunbae");
+  // 제작 보상 15잎이 글쓴이에게 들어간다.
+  assert.equal(body.leaves, 15);
+});
+
+test("only a senior can publish a tutorial", async () => {
+  const database = fakeDatabase({ "user:ch1:sinip": user("sinip", 0) });
+  const env = { APP_SECRET: secret };
+  const response = await withDatabase(database, () =>
+    handleApiRequest(
+      asUser(tokenFor("sinip"), "/api/missions/create", missionDraft),
+      env,
+    ),
+  );
+  assert.equal(response?.status, 403);
+});
+
+test("the same mission cannot be submitted twice while one is pending", async () => {
+  const database = fakeDatabase({
+    "user:ch1:sunbae": senior("sunbae"),
+    "user:ch1:sinip": user("sinip", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("sunbae", "/api/missions/create", missionDraft);
+  const { mission } = (await created?.json()) as { mission: { id: string } };
+
+  const first = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "다녀왔어요",
+  });
+  assert.equal(first?.status, 201);
+
+  const again = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "또 냈어요",
+  });
+  assert.equal(again?.status, 409);
+  assert.deepEqual(await again?.json(), { error: "already_submitted" });
+});
+
+test("approving pays the submitter once, and only the mission's author may judge", async () => {
+  const database = fakeDatabase({
+    "user:ch1:sunbae": senior("sunbae"),
+    "user:ch1:other": senior("other"),
+    "user:ch1:sinip": user("sinip", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("sunbae", "/api/missions/create", missionDraft);
+  const { mission } = (await created?.json()) as { mission: { id: string } };
+  const submitted = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "다녀왔어요",
+  });
+  const { submission } = (await submitted?.json()) as {
+    submission: { id: string };
+  };
+
+  // 제출자 본인은 심사할 수 없다.
+  assert.equal(
+    (
+      await call("sinip", "/api/submissions/review", {
+        submissionId: submission.id,
+        approve: true,
+      })
+    )?.status,
+    403,
+  );
+  // 미션을 만들지 않은 다른 선배도 안 된다.
+  assert.equal(
+    (
+      await call("other", "/api/submissions/review", {
+        submissionId: submission.id,
+        approve: true,
+      })
+    )?.status,
+    403,
+  );
+
+  const approved = await call("sunbae", "/api/submissions/review", {
+    submissionId: submission.id,
+    approve: true,
+  });
+  assert.equal(approved?.status, 200);
+
+  const me = await call("sinip", "/api/me");
+  const { profile } = (await me?.json()) as { profile: { leaves: number } };
+  assert.equal(profile.leaves, 10);
+
+  // 두 번 승인해도 보상은 한 번만 나간다.
+  assert.equal(
+    (
+      await call("sunbae", "/api/submissions/review", {
+        submissionId: submission.id,
+        approve: true,
+      })
+    )?.status,
+    409,
+  );
+  const again = await call("sinip", "/api/me");
+  const { profile: after } = (await again?.json()) as {
+    profile: { leaves: number };
+  };
+  assert.equal(after.leaves, 10);
+});
+
+test("a rejected submission pays nothing and can be retried", async () => {
+  const database = fakeDatabase({
+    "user:ch1:sunbae": senior("sunbae"),
+    "user:ch1:sinip": user("sinip", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("sunbae", "/api/missions/create", missionDraft);
+  const { mission } = (await created?.json()) as { mission: { id: string } };
+  const submitted = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "확인 부탁드려요",
+  });
+  const { submission } = (await submitted?.json()) as {
+    submission: { id: string };
+  };
+
+  await call("sunbae", "/api/submissions/review", {
+    submissionId: submission.id,
+    approve: false,
+  });
+
+  const me = await call("sinip", "/api/me");
+  const { profile } = (await me?.json()) as { profile: { leaves: number } };
+  assert.equal(profile.leaves, 0);
+
+  // 반려된 뒤에는 다시 낼 수 있다.
+  const retry = await call("sinip", "/api/submissions/create", {
+    missionId: mission.id,
+    note: "다시 냈어요",
+  });
+  assert.equal(retry?.status, 201);
+});

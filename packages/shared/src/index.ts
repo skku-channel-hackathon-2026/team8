@@ -187,3 +187,71 @@ export const LedgerEntrySchema = z.object({
 });
 
 export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;
+
+// ---- 튜토리얼 미션과 인증 ----
+
+/** 보상은 서버가 정한다. 클라이언트가 보낸 값은 쓰지 않는다. */
+export const MISSION_CREATE_REWARD = 15;
+export const MISSION_CLEAR_REWARD = 10;
+
+export const MissionCategorySchema = z.enum([
+  "campus",
+  "academic",
+  "life",
+  "digital",
+]);
+
+export const MissionDraftSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  description: z.string().trim().max(300).default(""),
+  proof: z.string().trim().max(200).default(""),
+  category: MissionCategorySchema,
+});
+
+export type MissionDraft = z.infer<typeof MissionDraftSchema>;
+
+export const MissionSchema = MissionDraftSchema.extend({
+  id: z.string(),
+  channelId: z.string(),
+  authorId: z.string(),
+  reward: z.number().int(),
+  recommenders: z.array(z.string()),
+  completedCount: z.number().int(),
+  createdAt: z.number().int(),
+});
+
+export type Mission = z.infer<typeof MissionSchema>;
+
+export const SubmissionStatusSchema = z.enum([
+  "pending",
+  "approved",
+  "rejected",
+]);
+
+export const SubmitMissionInputSchema = z.object({
+  missionId: z.string().min(1),
+  note: z.string().trim().max(300).default(""),
+});
+
+export const ReviewSubmissionInputSchema = z.object({
+  submissionId: z.string().min(1),
+  approve: z.boolean(),
+});
+
+export const MissionIdInputSchema = z.object({
+  missionId: z.string().min(1),
+});
+
+export const SubmissionSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  missionId: z.string(),
+  userId: z.string(),
+  note: z.string(),
+  status: SubmissionStatusSchema,
+  reviewerId: z.string().nullable(),
+  createdAt: z.number().int(),
+  reviewedAt: z.number().int().nullable(),
+});
+
+export type Submission = z.infer<typeof SubmissionSchema>;

@@ -7,6 +7,15 @@ import {
   type Profile,
 } from "@tutorial/shared";
 import {
+  MissionError,
+  createMission,
+  listMissions,
+  listSubmissions,
+  reviewSubmission,
+  submitMission,
+  toggleRecommend,
+} from "./missions.js";
+import {
   MarketError,
   cancelTask,
   confirmTask,
@@ -124,6 +133,12 @@ const ROUTES: Record<string, string> = {
   "/api/tasks/report": "POST",
   "/api/tasks/confirm": "POST",
   "/api/tasks/cancel": "POST",
+  "/api/missions": "GET",
+  "/api/missions/create": "POST",
+  "/api/missions/recommend": "POST",
+  "/api/submissions": "GET",
+  "/api/submissions/create": "POST",
+  "/api/submissions/review": "POST",
 };
 
 export async function handleApiRequest(
@@ -214,6 +229,36 @@ export async function handleApiRequest(
       return json(await cancelTask(key, body));
     } catch (error) {
       if (error instanceof MarketError) {
+        return json({ error: error.code }, error.status);
+      }
+      throw error;
+    }
+  }
+
+  // ---- 튜토리얼 미션과 인증 ------------------------------------------------
+  if (path.startsWith("/api/missions") || path.startsWith("/api/submissions")) {
+    try {
+      if (path === "/api/missions") {
+        return json({ missions: await listMissions(session.channelId) });
+      }
+      if (path === "/api/submissions") {
+        return json({
+          submissions: await listSubmissions(key, session.channelId),
+        });
+      }
+      const body = await readJson(request);
+      if (path === "/api/missions/create") {
+        return json(await createMission(key, session.channelId, body), 201);
+      }
+      if (path === "/api/missions/recommend") {
+        return json(await toggleRecommend(key, body));
+      }
+      if (path === "/api/submissions/create") {
+        return json(await submitMission(key, session.channelId, body), 201);
+      }
+      return json(await reviewSubmission(key, body));
+    } catch (error) {
+      if (error instanceof MissionError) {
         return json({ error: error.code }, error.status);
       }
       throw error;
