@@ -1,3 +1,8 @@
+import {
+  SYSTEM_SENDER,
+  type AppNotification,
+  type NotificationLink,
+} from '../types'
 import type {
   Campus,
   ChatMessage,
@@ -33,6 +38,8 @@ export interface TutorialState {
   done: boolean[]
   checks: Record<string, boolean>
   gradCredits: string
+  /** 첫 화면의 기본 튜토리얼 안내를 건너뛰었는지. 한 번 건너뛰면 다시 띄우지 않는다. */
+  introSkipped?: boolean
 }
 
 export interface AppState {
@@ -53,6 +60,8 @@ export interface AppState {
   chatMessages: ChatMessage[]
   /** 채팅방별로 상대의 응답을 흉내 내기까지 남은 대기 상태 */
   chatPending: ChatPending[]
+  /** 지금까지 받은 알림. 토스트로 잠깐 보인 내용도 여기에 쌓인다. */
+  notifications: AppNotification[]
 }
 
 export interface MissionDraft {
@@ -118,6 +127,8 @@ export type Action =
   | { type: 'TICK'; now: number }
   | { type: 'TOAST'; text: string; tone?: ToastTone }
   | { type: 'DISMISS_TOAST'; id: string }
+  | { type: 'MARK_NOTIFICATIONS_READ' }
+  | { type: 'SKIP_INTRO' }
 
 export const AVATAR_TONES = 5
 
@@ -137,6 +148,7 @@ export function createInitialState(identity: ChannelIdentity): AppState {
       done: [false, false, false, false],
       checks: {},
       gradCredits: '',
+      introSkipped: false,
     },
     ...buildSeed(),
     ledger: [],
@@ -144,6 +156,7 @@ export function createInitialState(identity: ChannelIdentity): AppState {
     toasts: [],
     chatMessages: [],
     chatPending: [],
+    notifications: [],
   }
 }
 
@@ -197,15 +210,168 @@ export function resolveChatPeer(
   return id ? findPerson(state, id) : undefined
 }
 
+const MAX_NOTIFICATIONS = 100
+const MARKET: NotificationLink = { name: 'market' }
+const MEET: NotificationLink = { name: 'meet' }
+const TUTORIAL: NotificationLink = { name: 'tutorial' }
+const MY: NotificationLink = { name: 'my' }
+
+/** 알림함에만 남긴다. 화면에 잠깐 뜨는 토스트는 만들지 않는다. */
+function notify(
+  state: AppState,
+  text: string,
+  tone: ToastTone = 'default',
+  link?: NotificationLink,
+  at = Date.now()
+): AppState {
+  const item: AppNotification = {
+    id: uid('n'),
+    text,
+    tone,
+    at,
+    read: false,
+    link,
+  }
+  return {
+    ...state,
+    notifications: [item, ...(state.notifications ?? [])].slice(
+      0,
+      MAX_NOTIFICATIONS
+    ),
+  }
+}
+
+/** 화면에 잠깐 띄우고, 같은 내용을 알림함에도 남긴다. */
 function toast(
   state: AppState,
   text: string,
-  tone: ToastTone = 'default'
+  tone: ToastTone = 'default',
+  link?: NotificationLink
+): AppState {
+  return notify(
+    {
+      ...state,
+      toasts: [...state.toasts, { id: uid('toast'), text, tone }].slice(-3),
+    },
+    text,
+    tone,
+    link
+  )
+}
+
+function addChatMessage(
+  state: AppState,
+  chatId: string,
+  senderId: string,
+  text: string,
+  at = Date.now()
 ): AppState {
   return {
     ...state,
-    toasts: [...state.toasts, { id: uid('toast'), text, tone }].slice(-3),
+    chatMessages: [
+      ...state.chatMessages,
+      { id: uid('msg'), chatId, senderId, text, at },
+    ],
   }
+}
+
+function hasChat(state: AppState, chatId: string): boolean {
+  return state.chatMessages.some((m) => m.chatId === chatId)
+}
+
+/** 1대1 신청이 성사되면 신청 메시지를 대화의 첫 줄로 남긴다. */
+function openDmChat(state: AppState, request: MeetRequest): AppState {
+  const partnerId = request.fromId === ME ? request.toId : request.fromId
+  const chatId = `dm:${partnerId}`
+  if (hasChat(state, chatId)) return state
+  let next = addChatMessage(
+    state,
+    chatId,
+    SYSTEM_SENDER,
+    `${THEME_LABEL[request.theme]} 신청이 연결됐어요`,
+    request.createdAt
+  )
+  next = addChatMessage(
+    next,
+    chatId,
+    request.fromId,
+    request.message,
+    request.createdAt + 1
+  )
+  return next
+}
+
+function roomChatId(roomId: string): string {
+  return `room:${roomId}`
+}
+
+export interface ChatSummary {
+  chatId: string
+  kind: 'dm' | 'room'
+  title: string
+  /** 1대1이면 상대, 모임이면 멤버 */
+  peopleIds: string[]
+  lastText: string
+  lastAt: number
+}
+
+/** 1대1 신청이 성사된 상대 id. 내가 수락했거나 상대가 내 신청을 수락한 경우다. */
+export function connectedPartnerIds(state: AppState): Set<string> {
+  const ids = new Set<string>()
+  for (const r of state.requests) {
+    if (r.kind !== 'dm' || r.status !== 'accepted') continue
+    if (r.fromId === ME) ids.add(r.toId)
+    else if (r.toId === ME) ids.add(r.fromId)
+  }
+  return ids
+}
+
+/** "참여한 채팅방" 목록. 성사된 1대1과 내가 들어가 있는 모임을 최근 대화순으로 모은다. */
+export function joinedChats(state: AppState): ChatSummary[] {
+  const summaries: ChatSummary[] = []
+  const lastOf = (chatId: string) => {
+    let last: ChatMessage | undefined
+    for (const m of state.chatMessages) {
+      if (m.chatId === chatId && (!last || m.at >= last.at)) last = m
+    }
+    return last
+  }
+
+  for (const partnerId of connectedPartnerIds(state)) {
+    const chatId = `dm:${partnerId}`
+    const partner = findPerson(state, partnerId)
+    const request = state.requests.find(
+      (r) =>
+        r.kind === 'dm' &&
+        r.status === 'accepted' &&
+        (r.fromId === partnerId || r.toId === partnerId)
+    )
+    const last = lastOf(chatId)
+    summaries.push({
+      chatId,
+      kind: 'dm',
+      title: partner?.nickname ?? '알 수 없음',
+      peopleIds: [partnerId],
+      lastText: last?.text ?? request?.message ?? '',
+      lastAt: last?.at ?? request?.createdAt ?? 0,
+    })
+  }
+
+  for (const room of state.rooms) {
+    if (!room.memberIds.includes(ME)) continue
+    const chatId = roomChatId(room.id)
+    const last = lastOf(chatId)
+    summaries.push({
+      chatId,
+      kind: 'room',
+      title: room.title,
+      peopleIds: room.memberIds,
+      lastText: last?.text ?? room.note,
+      lastAt: last?.at ?? room.createdAt,
+    })
+  }
+
+  return summaries.sort((a, b) => b.lastAt - a.lastAt)
 }
 
 function grant(state: AppState, delta: number, label: string): AppState {
@@ -240,7 +406,33 @@ function completeStep(state: AppState, step: StepId): AppState {
   const reward = REWARDS.steps[step]
   let next: AppState = { ...state, tutorial: { ...state.tutorial, done } }
   next = grant(next, reward, `튜토리얼 ${step}단계 · ${STEP_INFO[step].title}`)
-  return toast(next, `${step}단계 완료! 은행잎 ${reward}잎을 받았어요`, 'leaf')
+  return toast(
+    next,
+    `${step}단계 완료! 은행잎 ${reward}잎을 받았어요`,
+    'leaf',
+    TUTORIAL
+  )
+}
+
+/** 모임 채팅의 답장은 나를 뺀 멤버가 돌아가며 한다. */
+function responderFor(
+  state: AppState,
+  chatId: string,
+  salt: string
+): string | undefined {
+  const [kind, rest] = chatId.split(':')
+  if (kind === 'room') {
+    const room = state.rooms.find((r) => r.id === rest)
+    const others = room?.memberIds.filter((id) => id !== ME) ?? []
+    return others.length > 0 ? hashPick(others, salt) : undefined
+  }
+  return counterpartIdFor(state, chatId)
+}
+
+function chatTitle(state: AppState, chatId: string): string | undefined {
+  const [kind, rest] = chatId.split(':')
+  if (kind === 'room') return state.rooms.find((r) => r.id === rest)?.title
+  return resolveChatPeer(state, chatId)?.nickname
 }
 
 function tick(state: AppState, now: number): AppState {
@@ -284,29 +476,27 @@ function tick(state: AppState, now: number): AppState {
       next = toast(
         next,
         `${reviewer.nickname}님이 인증을 인정했어요 · +${mission.reward}잎`,
-        'leaf'
+        'leaf',
+        TUTORIAL
       )
     }
   }
 
   for (const pending of state.chatPending) {
     if (pending.at > now) continue
-    const peerId = counterpartIdFor(state, pending.chatId)
+    const peerId = responderFor(
+      state,
+      pending.chatId,
+      `${pending.chatId}:${pending.at}`
+    )
     if (peerId) {
       const reply = hashPick(CHAT_REPLIES, `${pending.chatId}:${now}`)
-      next = {
-        ...next,
-        chatMessages: [
-          ...next.chatMessages,
-          {
-            id: uid('msg'),
-            chatId: pending.chatId,
-            senderId: peerId,
-            text: reply,
-            at: now,
-          },
-        ],
-      }
+      next = addChatMessage(next, pending.chatId, peerId, reply, now)
+      next = notify(next, `${nick(state, peerId)}: ${reply}`, 'default', {
+        name: 'chat',
+        chatId: pending.chatId,
+        title: chatTitle(state, pending.chatId),
+      })
     }
     next = {
       ...next,
@@ -341,11 +531,33 @@ function tick(state: AppState, now: number): AppState {
             : room
         ),
       }
-      next = toast(next, `${who}님이 모임에 들어왔어요`)
+      const chatId = roomChatId(req.roomId)
+      next = addChatMessage(
+        next,
+        chatId,
+        SYSTEM_SENDER,
+        `${who}님이 들어왔어요`,
+        now
+      )
+      next = toast(next, `${who}님이 모임에 들어왔어요`, 'default', {
+        name: 'chat',
+        chatId,
+        title: chatTitle(next, chatId),
+      })
     } else {
+      next = openDmChat(next, req)
+      next = addChatMessage(
+        next,
+        `dm:${req.toId}`,
+        req.toId,
+        `신청 수락했어요! ${THEME_LABEL[req.theme]} 같이 해요`,
+        now
+      )
       next = toast(
         next,
-        `${who}님이 ${THEME_LABEL[req.theme]} 신청을 수락했어요!`
+        `${who}님이 ${THEME_LABEL[req.theme]} 신청을 수락했어요!`,
+        'default',
+        { name: 'chat', chatId: `dm:${req.toId}`, title: who }
       )
     }
   }
@@ -362,11 +574,18 @@ function tick(state: AppState, now: number): AppState {
       })
       next = toast(
         next,
-        `${worker.nickname}님이 공강을 팔았어요 · ${task.title}`
+        `${worker.nickname}님이 공강을 팔았어요 · ${task.title}`,
+        'default',
+        MARKET
       )
     } else if (task.requesterId === ME && task.status === 'assigned') {
       next = patchTask(next, task.id, { status: 'reported', autoAt: undefined })
-      next = toast(next, `${nick(state, task.workerId)}님이 완료를 보고했어요`)
+      next = toast(
+        next,
+        `${nick(state, task.workerId)}님이 완료를 보고했어요`,
+        'default',
+        MARKET
+      )
     } else if (task.workerId === ME && task.status === 'reported') {
       next = patchTask(next, task.id, {
         status: 'completed',
@@ -376,7 +595,8 @@ function tick(state: AppState, now: number): AppState {
       next = toast(
         next,
         `${nick(state, task.requesterId)}님이 완료를 확인했어요 · +${task.reward}잎`,
-        'leaf'
+        'leaf',
+        MARKET
       )
     } else {
       next = patchTask(next, task.id, { autoAt: undefined })
@@ -402,15 +622,32 @@ export function reducer(state: AppState, action: Action): AppState {
         tone: hashString(action.nickname) % AVATAR_TONES,
         leaves: 0,
       }
-      const next = grant(
+      let next = grant(
         { ...state, profile },
         REWARDS.signup,
         '가입 축하 은행잎'
       )
+      for (const request of state.requests) {
+        if (request.toId !== ME || request.status !== 'pending') continue
+        const from = nick(state, request.fromId)
+        const room = request.roomId
+          ? state.rooms.find((r) => r.id === request.roomId)
+          : undefined
+        next = notify(
+          next,
+          room
+            ? `${from}님이 '${room.title}' 모임에 초대했어요`
+            : `${from}님이 1대1 ${THEME_LABEL[request.theme]} 신청을 보냈어요`,
+          'default',
+          MEET,
+          request.createdAt
+        )
+      }
       return toast(
         next,
         `환영해요, ${action.nickname}님! 은행잎 ${REWARDS.signup}잎을 드렸어요`,
-        'leaf'
+        'leaf',
+        MY
       )
     }
 
@@ -421,6 +658,9 @@ export function reducer(state: AppState, action: Action): AppState {
           // 저장된 신원은 믿지 않는다. 지금 호스트가 준 값이 기준이다.
           identity: state.identity,
           clock: action.state.clock ?? DEFAULT_CLOCK,
+          chatMessages: action.state.chatMessages ?? [],
+          chatPending: action.state.chatPending ?? [],
+          notifications: action.state.notifications ?? [],
           toasts: [],
         },
         `다시 만나서 반가워요, ${action.state.profile?.nickname ?? ''}님`
@@ -442,7 +682,9 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!state.profile) return state
       return toast(
         { ...state, profile: { ...state.profile, showFree: action.value } },
-        action.value ? '공강 상태를 공개했어요' : '공강 상태를 숨겼어요'
+        action.value ? '공강 상태를 공개했어요' : '공강 상태를 숨겼어요',
+        'default',
+        MY
       )
 
     case 'CHARGE':
@@ -453,7 +695,8 @@ export function reducer(state: AppState, action: Action): AppState {
           `은행잎 충전 · ${action.price.toLocaleString('ko-KR')}원`
         ),
         `은행잎 ${action.amount}잎을 충전했어요`,
-        'leaf'
+        'leaf',
+        MY
       )
 
     case 'TOGGLE_CHECK':
@@ -499,7 +742,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return toast(
         next,
         `튜토리얼을 올렸어요! 은행잎 ${REWARDS.missionCreate}잎을 받았어요`,
-        'leaf'
+        'leaf',
+        TUTORIAL
       )
     }
 
@@ -540,7 +784,9 @@ export function reducer(state: AppState, action: Action): AppState {
       }
       return toast(
         { ...state, submissions: [submission, ...state.submissions] },
-        '인증을 보냈어요. 헌내기 선배가 확인하면 완료돼요'
+        '인증을 보냈어요. 헌내기 선배가 확인하면 완료돼요',
+        'default',
+        TUTORIAL
       )
     }
 
@@ -571,7 +817,9 @@ export function reducer(state: AppState, action: Action): AppState {
         next,
         action.approve
           ? `${nick(state, target.userId)}님의 인증을 인정했어요`
-          : `${nick(state, target.userId)}님의 인증을 반려했어요`
+          : `${nick(state, target.userId)}님의 인증을 반려했어요`,
+        'default',
+        TUTORIAL
       )
     }
 
@@ -597,7 +845,9 @@ export function reducer(state: AppState, action: Action): AppState {
       }
       return toast(
         { ...state, requests: [request, ...state.requests] },
-        `${nick(state, action.toId)}님에게 ${THEME_LABEL[action.theme]} 신청을 보냈어요`
+        `${nick(state, action.toId)}님에게 ${THEME_LABEL[action.theme]} 신청을 보냈어요`,
+        'default',
+        MEET
       )
     }
 
@@ -613,7 +863,11 @@ export function reducer(state: AppState, action: Action): AppState {
             : r
         ),
       }
-      if (action.accept && target.kind === 'room' && target.roomId) {
+      if (!action.accept) {
+        return toast(next, '신청을 거절했어요', 'default', MEET)
+      }
+      let link: NotificationLink
+      if (target.kind === 'room' && target.roomId) {
         next = {
           ...next,
           rooms: next.rooms.map((room) =>
@@ -624,12 +878,27 @@ export function reducer(state: AppState, action: Action): AppState {
               : room
           ),
         }
+        const chatId = roomChatId(target.roomId)
+        next = addChatMessage(
+          next,
+          chatId,
+          SYSTEM_SENDER,
+          `${state.profile?.nickname ?? '나'}님이 들어왔어요`
+        )
+        link = { name: 'chat', chatId, title: chatTitle(next, chatId) }
+      } else {
+        next = openDmChat(next, target)
+        link = {
+          name: 'chat',
+          chatId: `dm:${target.fromId}`,
+          title: nick(state, target.fromId),
+        }
       }
       return toast(
         next,
-        action.accept
-          ? `${nick(state, target.fromId)}님의 신청을 수락했어요`
-          : '신청을 거절했어요'
+        `${nick(state, target.fromId)}님의 신청을 수락했어요`,
+        'default',
+        link
       )
     }
 
@@ -640,26 +909,47 @@ export function reducer(state: AppState, action: Action): AppState {
         memberIds: [ME],
         createdAt: Date.now(),
       }
-      return toast(
+      const chatId = roomChatId(room.id)
+      const next = addChatMessage(
         { ...state, rooms: [room, ...state.rooms] },
-        '모임방을 만들었어요'
+        chatId,
+        SYSTEM_SENDER,
+        '모임방을 만들었어요. 공강인 친구를 초대해 보세요'
       )
+      return toast(next, '모임방을 만들었어요', 'default', {
+        name: 'chat',
+        chatId,
+        title: room.title,
+      })
     }
 
-    case 'JOIN_ROOM':
-      return toast(
+    case 'JOIN_ROOM': {
+      const room = state.rooms.find((r) => r.id === action.roomId)
+      if (
+        !room ||
+        room.memberIds.includes(ME) ||
+        room.memberIds.length >= room.max
+      ) {
+        return state
+      }
+      const chatId = roomChatId(room.id)
+      const next = addChatMessage(
         {
           ...state,
-          rooms: state.rooms.map((room) =>
-            room.id === action.roomId &&
-            !room.memberIds.includes(ME) &&
-            room.memberIds.length < room.max
-              ? { ...room, memberIds: [...room.memberIds, ME] }
-              : room
+          rooms: state.rooms.map((r) =>
+            r.id === room.id ? { ...r, memberIds: [...r.memberIds, ME] } : r
           ),
         },
-        '모임에 참여했어요'
+        chatId,
+        SYSTEM_SENDER,
+        `${state.profile?.nickname ?? '나'}님이 들어왔어요`
       )
+      return toast(next, '모임에 참여했어요', 'default', {
+        name: 'chat',
+        chatId,
+        title: room.title,
+      })
+    }
 
     case 'LEAVE_ROOM':
       return toast(
@@ -676,7 +966,9 @@ export function reducer(state: AppState, action: Action): AppState {
             )
             .filter((room) => room.memberIds.length > 0),
         },
-        '모임에서 나왔어요'
+        '모임에서 나왔어요',
+        'default',
+        MEET
       )
 
     case 'INVITE': {
@@ -705,14 +997,21 @@ export function reducer(state: AppState, action: Action): AppState {
       }))
       return toast(
         { ...state, requests: [...created, ...state.requests] },
-        `${targets.length}명에게 초대를 보냈어요`
+        `${targets.length}명에게 초대를 보냈어요`,
+        'default',
+        { name: 'chat', chatId: roomChatId(room.id), title: room.title }
       )
     }
 
     case 'POST_TASK': {
       if (!state.profile) return state
       if (state.profile.leaves < action.draft.reward) {
-        return toast(state, '은행잎이 부족해요. 충전 후 다시 시도해 주세요')
+        return toast(
+          state,
+          '은행잎이 부족해요. 충전 후 다시 시도해 주세요',
+          'default',
+          MY
+        )
       }
       const task: Task = {
         id: uid('t'),
@@ -727,7 +1026,12 @@ export function reducer(state: AppState, action: Action): AppState {
         -task.reward,
         `공강 사기 · ${task.title} (보수 예치)`
       )
-      return toast(next, '부탁을 올렸어요. 공강인 사람을 찾고 있어요')
+      return toast(
+        next,
+        '부탁을 올렸어요. 공강인 사람을 찾고 있어요',
+        'default',
+        MARKET
+      )
     }
 
     case 'CANCEL_TASK': {
@@ -739,7 +1043,12 @@ export function reducer(state: AppState, action: Action): AppState {
         task.reward,
         `공강 사기 취소 · ${task.title} (환불)`
       )
-      return toast(next, `부탁을 취소하고 ${task.reward}잎을 돌려받았어요`)
+      return toast(
+        next,
+        `부탁을 취소하고 ${task.reward}잎을 돌려받았어요`,
+        'default',
+        MARKET
+      )
     }
 
     case 'TAKE_TASK': {
@@ -748,7 +1057,9 @@ export function reducer(state: AppState, action: Action): AppState {
         return state
       return toast(
         patchTask(state, task.id, { status: 'assigned', workerId: ME }),
-        '공강을 팔았어요! 일을 마치면 완료 보고를 눌러 주세요'
+        '공강을 팔았어요! 일을 마치면 완료 보고를 눌러 주세요',
+        'default',
+        MARKET
       )
     }
 
@@ -761,7 +1072,9 @@ export function reducer(state: AppState, action: Action): AppState {
           status: 'reported',
           autoAt: Date.now() + 4000,
         }),
-        '완료를 보고했어요. 확인되면 보수가 들어와요'
+        '완료를 보고했어요. 확인되면 보수가 들어와요',
+        'default',
+        MARKET
       )
     }
 
@@ -772,7 +1085,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return toast(
         patchTask(state, task.id, { status: 'completed' }),
         `${nick(state, task.workerId)}님에게 ${task.reward}잎을 보냈어요`,
-        'leaf'
+        'leaf',
+        MARKET
       )
     }
 
@@ -810,6 +1124,21 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'TOAST':
       return toast(state, action.text, action.tone)
+
+    case 'MARK_NOTIFICATIONS_READ':
+      if (!(state.notifications ?? []).some((n) => !n.read)) return state
+      return {
+        ...state,
+        notifications: state.notifications.map((n) =>
+          n.read ? n : { ...n, read: true }
+        ),
+      }
+
+    case 'SKIP_INTRO':
+      return {
+        ...state,
+        tutorial: { ...state.tutorial, introSkipped: true },
+      }
 
     case 'DISMISS_TOAST':
       return {

@@ -122,9 +122,30 @@ export interface LedgerEntry {
 export interface ChatMessage {
   id: string
   chatId: string
+  /** 보낸 사람 id. `system`이면 입장 안내 같은 시스템 메시지다. */
   senderId: string
   text: string
   at: number
+}
+
+export const SYSTEM_SENDER = 'system'
+
+/** 알림을 눌렀을 때 이동할 화면 */
+export type NotificationLink =
+  | { name: 'tutorial' }
+  | { name: 'meet' }
+  | { name: 'market' }
+  | { name: 'my' }
+  | { name: 'chats' }
+  | { name: 'chat'; chatId: string; title?: string }
+
+export interface AppNotification {
+  id: string
+  text: string
+  tone: ToastTone
+  at: number
+  read: boolean
+  link?: NotificationLink
 }
 
 export interface ChatPending {

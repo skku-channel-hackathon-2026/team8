@@ -36,6 +36,8 @@ export type Route =
   | { name: 'timetable' }
   | { name: 'room'; roomId: string }
   | { name: 'chat'; chatId: string; title?: string }
+  | { name: 'chats' }
+  | { name: 'notifications' }
 
 export type GlobalSheet = 'charge' | 'clock' | null
 

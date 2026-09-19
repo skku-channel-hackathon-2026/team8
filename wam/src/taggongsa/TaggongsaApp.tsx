@@ -17,11 +17,12 @@ import { DAY_LABELS, fmt } from './lib/time'
 import { Icon } from './ui/Icon'
 import { Leaf, Mascot } from './ui/Mascot'
 import { Empty, IconButton } from './ui/primitives'
-import { ChatScreen } from './screens/Chat'
+import { ChatListScreen, ChatScreen } from './screens/Chat'
 import { MarketScreen } from './screens/Market'
 import { MeetScreen, RoomScreen } from './screens/Meet'
 import { MenuScreen } from './screens/Menu'
 import { ChargeSheet, ClockSheet, MyPage } from './screens/MyPage'
+import { NotificationsScreen } from './screens/Notifications'
 import { Login, Signup, Welcome } from './screens/Onboarding'
 import { TimetableScreen } from './screens/Timetable'
 import { TutorialScreen } from './screens/Tutorial'
@@ -36,6 +37,8 @@ const ROUTE_TITLE: Record<Route['name'], string> = {
   timetable: '시간표',
   room: '모임방',
   chat: '채팅',
+  chats: '참여한 채팅방',
+  notifications: '알림',
 }
 
 function routeTitle(route: Route): string {
@@ -118,11 +121,15 @@ function renderRoute(route: Route) {
           chatId={route.chatId}
         />
       )
+    case 'chats':
+      return <ChatListScreen />
+    case 'notifications':
+      return <NotificationsScreen />
   }
 }
 
 function Shell() {
-  const { state, me } = useApp()
+  const { state, me, dispatch } = useApp()
   const { close } = useWamClose()
   const [stack, setStack] = useState<Route[]>([])
   const [sheet, setSheet] = useState<GlobalSheet>(null)
@@ -154,6 +161,12 @@ function Shell() {
   )
 
   const top = stack[stack.length - 1]
+  const unread = (state.notifications ?? []).filter((n) => !n.read).length
+  // 기본 튜토리얼을 다 끝내지 않았고 건너뛴 적도 없는 새내기는 메뉴보다 튜토리얼을 먼저 본다.
+  const showIntro =
+    me?.role === 'fresh' &&
+    !state.tutorial.introSkipped &&
+    !state.tutorial.done.slice(0, 4).every(Boolean)
   const closeButton = (
     <IconButton
       icon="close"
@@ -228,6 +241,22 @@ function Shell() {
           <>
             <Logo />
             <span className="tg-header__spacer" />
+            <button
+              type="button"
+              className="tg-iconbtn tg-bell"
+              aria-label={
+                unread > 0 ? `알림, 안 읽은 알림 ${unread}개` : '알림'
+              }
+              title="알림"
+              onClick={() => nav.push({ name: 'notifications' })}
+            >
+              <Icon name="bell" />
+              {unread > 0 && (
+                <span className="tg-badge tg-bell__badge">
+                  {unread > 99 ? '99+' : unread}
+                </span>
+              )}
+            </button>
           </>
         )}
         {closeButton}
@@ -237,8 +266,23 @@ function Shell() {
         ref={scrollRef}
         className="tg-scroll"
       >
-        {top ? renderRoute(top) : <MenuScreen />}
+        {top ? (
+          renderRoute(top)
+        ) : showIntro ? (
+          <TutorialScreen intro />
+        ) : (
+          <MenuScreen />
+        )}
       </div>
+      {!top && showIntro && (
+        <button
+          type="button"
+          className="tg-skip"
+          onClick={() => dispatch({ type: 'SKIP_INTRO' })}
+        >
+          건너뛰기
+        </button>
+      )}
       {sheet === 'charge' && <ChargeSheet onClose={() => setSheet(null)} />}
       {sheet === 'clock' && <ClockSheet onClose={() => setSheet(null)} />}
       <Toasts />

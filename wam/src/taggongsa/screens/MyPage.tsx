@@ -1,9 +1,13 @@
 import { useState } from 'react'
 import { useApp, useMe, useNav } from '../store/context'
-import { DEFAULT_CLOCK, ME } from '../store/state'
+import { DEFAULT_CLOCK, ME, findPerson } from '../store/state'
 import { useTheme } from '../store/theme'
-import { CAMPUS_LABEL, ROLE_LABEL } from '../data/labels'
-import type { ClockSetting } from '../types'
+import {
+  CAMPUS_LABEL,
+  MISSION_CATEGORY_LABEL,
+  ROLE_LABEL,
+} from '../data/labels'
+import type { ClockSetting, Mission, Submission } from '../types'
 import { cx } from '../lib/cx'
 import {
   DAY_LABELS,
@@ -30,6 +34,13 @@ import {
   Switch,
 } from '../ui/primitives'
 import { TimetableGrid } from './Timetable'
+
+function formatDate(timestamp: number): string {
+  return new Date(timestamp).toLocaleDateString('ko-KR', {
+    month: 'long',
+    day: 'numeric',
+  })
+}
 
 const PACKS = [
   { amount: 10, price: 1000 },
@@ -255,6 +266,20 @@ export function MyPage() {
   ).length
   const madeMissions = state.missions.filter((m) => m.authorId === ME).length
   const reviewed = state.submissions.filter((s) => s.reviewerId === ME).length
+  const completedList = state.submissions
+    .filter((s) => s.userId === ME && s.status === 'approved')
+    .map((submission) => ({
+      submission,
+      mission: state.missions.find((m) => m.id === submission.missionId),
+    }))
+    .filter(
+      (item): item is { submission: Submission; mission: Mission } =>
+        item.mission !== undefined
+    )
+    .sort((a, b) => b.submission.createdAt - a.submission.createdAt)
+  const myTutorials = state.missions
+    .filter((m) => m.authorId === ME)
+    .sort((a, b) => b.createdAt - a.createdAt)
 
   return (
     <div className="tg-stack tg-stack--lg">
@@ -306,6 +331,94 @@ export function MyPage() {
           </p>
         )}
       </Card>
+
+      {me.role === 'fresh' ? (
+        <div className="tg-stack tg-stack--sm">
+          <SectionHead title={`완료한 추가 튜토리얼 ${completedList.length}`} />
+          {completedList.length === 0 ? (
+            <Card tone="tan">
+              <p className="tg-caption">
+                아직 완료한 추가 튜토리얼이 없어요. 기본 튜토리얼 3단계를 마치면
+                선배들이 만든 추가 튜토리얼에 도전할 수 있어요.
+              </p>
+            </Card>
+          ) : (
+            <div className="tg-list">
+              {completedList.map(({ submission, mission }) => {
+                const reviewer = submission.reviewerId
+                  ? findPerson(state, submission.reviewerId)
+                  : undefined
+                return (
+                  <div
+                    key={submission.id}
+                    className="tg-listitem"
+                  >
+                    <span className="tg-doneitem__icon">
+                      <Icon
+                        name="check"
+                        size={16}
+                        strokeWidth={2.6}
+                      />
+                    </span>
+                    <div className="tg-grow">
+                      <p className="tg-strong">{mission.title}</p>
+                      <p className="tg-caption">
+                        {MISSION_CATEGORY_LABEL[mission.category]} ·{' '}
+                        {reviewer
+                          ? `${reviewer.nickname} 선배가 인정`
+                          : '인정 완료'}{' '}
+                        · {formatDate(submission.createdAt)}
+                      </p>
+                    </div>
+                    <span className="tg-price">
+                      <LeafAmount
+                        value={mission.reward}
+                        size="sm"
+                        sign
+                      />
+                    </span>
+                  </div>
+                )
+              })}
+            </div>
+          )}
+        </div>
+      ) : (
+        <div className="tg-stack tg-stack--sm">
+          <SectionHead
+            title={`내가 만든 추가 튜토리얼 ${myTutorials.length}`}
+          />
+          {myTutorials.length === 0 ? (
+            <Card tone="tan">
+              <p className="tg-caption">
+                아직 만든 튜토리얼이 없어요. 튜토리얼 메뉴에서 새내기를 위한
+                튜토리얼을 만들어 보세요.
+              </p>
+            </Card>
+          ) : (
+            <div className="tg-list">
+              {myTutorials.map((tutorial) => (
+                <div
+                  key={tutorial.id}
+                  className="tg-listitem"
+                >
+                  <div className="tg-grow">
+                    <p className="tg-strong">{tutorial.title}</p>
+                    <p className="tg-caption">
+                      {MISSION_CATEGORY_LABEL[tutorial.category]} · 새내기 보상{' '}
+                      {tutorial.reward}잎 · {formatDate(tutorial.createdAt)}
+                    </p>
+                    <p className="tg-caption">
+                      새내기 {tutorial.completedCount}명 완료 · 헌내기{' '}
+                      {tutorial.recommenders.length}명 추천
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       <Card tone="gold">
         <div className="tg-stack tg-stack--sm">

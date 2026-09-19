@@ -1326,7 +1326,7 @@
   line-height: 1.4;
 }
 
-/* ---------- 미션, 모임, 마켓 카드 ---------- */
+/* ---------- 튜토리얼, 모임, 마켓 카드 ---------- */
 .tg-mission,
 .tg-room,
 .tg-task {
@@ -2171,4 +2171,198 @@ button.tg-mission:hover,
 .tg-chat__send:disabled {
   opacity: 0.4;
   cursor: default;
+}
+
+/* ---------- 참여한 채팅방 ---------- */
+.tg-chatentry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 14px 16px;
+  border: 1px solid var(--tg-line);
+  border-radius: 18px;
+  background: var(--tg-surface);
+  box-shadow: var(--tg-shadow-sm);
+  color: var(--tg-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tg-chatentry .tg-grow {
+  display: flex;
+  flex-direction: column;
+}
+
+.tg-chatentry__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 14px;
+  background: var(--tg-strong);
+  color: var(--tg-on-strong);
+}
+
+.tg-chatitem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: none;
+  color: var(--tg-ink);
+  text-align: left;
+  cursor: pointer;
+}
+
+.tg-chatitem:hover {
+  background: var(--tg-surface-2);
+}
+
+.tg-chatitem__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-chatitem__last {
+  display: block;
+  overflow: hidden;
+  color: var(--tg-ink-2);
+  font-size: 13px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tg-chat__system {
+  align-self: center;
+  max-width: 90%;
+  padding: 4px 12px;
+  border-radius: 999px;
+  background: var(--tg-tan);
+  color: var(--tg-ink-2);
+  font-size: 12px;
+  text-align: center;
+}
+
+.tg-bubble__name {
+  color: var(--tg-ink-2);
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* ---------- 알림 ---------- */
+.tg-bell {
+  position: relative;
+}
+
+.tg-bell__badge {
+  position: absolute;
+  top: 2px;
+  right: 0;
+  margin: 0;
+  box-shadow: 0 0 0 2px var(--tg-bg);
+}
+
+.tg-noti {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 14px;
+  border: 0;
+  background: none;
+  color: var(--tg-ink);
+  text-align: left;
+}
+
+button.tg-noti {
+  cursor: pointer;
+}
+
+button.tg-noti:hover {
+  background: var(--tg-surface-2);
+}
+
+.tg-noti--new {
+  background: var(--tg-blue-soft);
+}
+
+.tg-noti .tg-grow {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tg-noti__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--tg-tan);
+  color: var(--tg-heading);
+}
+
+.tg-noti__text {
+  font-size: 14px;
+  font-weight: 600;
+  line-height: 1.4;
+}
+
+.tg-noti__dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--tg-heart);
+}
+
+/* ---------- 첫 화면 기본 튜토리얼 건너뛰기 ---------- */
+.tg-skip {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  z-index: 30;
+  height: 32px;
+  padding: 0 14px;
+  border: 1px solid var(--tg-line-strong);
+  border-radius: 999px;
+  background: var(--tg-surface);
+  box-shadow: var(--tg-shadow);
+  color: var(--tg-ink-2);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.tg-skip:hover {
+  color: var(--tg-heading);
+}
+
+/* ---------- 마이페이지 완료 목록 ---------- */
+.tg-doneitem__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: var(--tg-green-soft);
+  color: var(--tg-green);
+}
+
+.tg-chatitem__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: var(--tg-ginkgo-soft);
+  color: var(--tg-heading);
 }

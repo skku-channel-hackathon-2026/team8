@@ -127,6 +127,23 @@ export function buildSeed(base = Date.now()) {
       c('민법총칙', 2, '13:00', '14:45', '법학관 50105'),
       c('형법총론', 3, '10:30', '12:15', '법학관 50107'),
     ]),
+    student('s13', '새싹', '전자전기공학부', 'fresh', 3, [
+      c('일반물리학1', 0, '09:00', '10:15', '제1과학관 31215'),
+      c('회로이론', 2, '10:30', '11:45', '제1공학관 21204'),
+      c('공학수학', 2, '15:00', '16:15', '제2공학관 27301'),
+    ]),
+    student('s14', '감자', '기계공학부', 'senior', 0, [
+      c('열역학', 2, '09:00', '10:15', '제1공학관 21108'),
+      c('유체역학', 3, '13:00', '14:15', '제1공학관 21110'),
+    ]),
+    student('s15', '고구마', '약학과', 'fresh', 4, [
+      c('일반화학', 0, '10:30', '11:45', '약학관 53101'),
+      c('일반화학', 2, '12:00', '13:15', '약학관 53101'),
+    ]),
+    student('s16', '토끼', '생명과학과', 'senior', 2, [
+      c('분자생물학', 2, '16:30', '17:45', '제1과학관 31312'),
+      c('생화학', 4, '10:30', '11:45', '제1과학관 31310'),
+    ]),
   ]
 
   const missions: Mission[] = [
@@ -278,6 +295,30 @@ export function buildSeed(base = Date.now()) {
       note: '각자 공부하다가 모르는 거 서로 물어봐요',
       createdAt: minutesAgo(40),
     },
+    {
+      id: 'r5',
+      title: '반도체관 앞 배드민턴 한 게임',
+      theme: 'play',
+      place: '반도체관 앞 잔디밭',
+      until: hm('15:00'),
+      max: 4,
+      hostId: 's14',
+      memberIds: ['s14', 's16'],
+      note: '라켓 두 개 챙겨왔어요',
+      createdAt: minutesAgo(12),
+    },
+    {
+      id: 'r6',
+      title: '일반물리 과제 같이 풀어요',
+      theme: 'study',
+      place: '삼성학술정보관 그룹스터디룸',
+      until: hm('15:00'),
+      max: 4,
+      hostId: 's13',
+      memberIds: ['s13', 's2'],
+      note: '3장 연습문제 위주로 봐요',
+      createdAt: minutesAgo(20),
+    },
   ]
 
   const requests: MeetRequest[] = [
@@ -387,6 +428,47 @@ export function buildSeed(base = Date.now()) {
       requesterId: 's8',
       status: 'open',
       createdAt: minutesAgo(2),
+    },
+    {
+      id: 't7',
+      title: '팀플 발표 자료 정리 도와주세요',
+      detail:
+        '발표 슬라이드 12장을 템플릿에 맞춰 정리해 주세요. 두 시간 정도 걸려요.',
+      place: '경영관 2층 라운지',
+      deadline: hm('17:30'),
+      duration: 120,
+      reward: 30,
+      category: 'study',
+      requesterId: 's9',
+      status: 'open',
+      createdAt: minutesAgo(14),
+    },
+    {
+      id: 't8',
+      title: '열람실 자리 지켜 주세요',
+      detail:
+        '시험 기간이라 자리가 금방 차요. 제 수업이 끝날 때까지 자리를 지켜 주시면 돼요.',
+      place: '중앙학술정보관 3층 열람실',
+      deadline: hm('16:00'),
+      duration: 150,
+      reward: 15,
+      category: 'queue',
+      requesterId: 's12',
+      status: 'open',
+      createdAt: minutesAgo(26),
+    },
+    {
+      id: 't9',
+      title: '택배 하나 대신 부쳐 주세요',
+      detail: '상자 하나만 부치면 돼요. 우체국이 13:30에 문을 닫아서 급해요.',
+      place: '학생회관 우체국',
+      deadline: hm('13:30'),
+      duration: 30,
+      reward: 10,
+      category: 'errand',
+      requesterId: 's6',
+      status: 'open',
+      createdAt: minutesAgo(4),
     },
   ]
 

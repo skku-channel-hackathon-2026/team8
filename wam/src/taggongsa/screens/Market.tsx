@@ -397,7 +397,7 @@ function TaskCard({
           disabled={expired}
           onClick={onTake}
         >
-          이 공강 팔기
+          요청 수락하기
         </Button>
       </div>
     </div>
