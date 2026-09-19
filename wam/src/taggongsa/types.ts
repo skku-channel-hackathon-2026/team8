@@ -57,6 +57,8 @@ export interface Submission {
   status: SubmissionStatus
   reviewerId?: string
   createdAt: number
+  /** 데모에서 선배의 심사를 흉내 낼 시각 */
+  resolveAt?: number
 }
 
 export type RequestStatus = 'pending' | 'accepted' | 'declined'
@@ -71,6 +73,8 @@ export interface MeetRequest {
   roomId?: string
   status: RequestStatus
   createdAt: number
+  /** 데모에서 상대의 응답을 흉내 낼 시각 */
+  resolveAt?: number
 }
 
 export interface Room {
@@ -103,6 +107,8 @@ export interface Task {
   workerId?: string
   status: TaskStatus
   createdAt: number
+  /** 데모에서 다음 단계로 넘어갈 시각 */
+  autoAt?: number
 }
 
 export interface LedgerEntry {
@@ -112,7 +118,10 @@ export interface LedgerEntry {
   at: number
 }
 
-/** chatId 형식: `dm:<상대ID>` · `room:<모임ID>` · `task:<부탁ID>` */
+/**
+ * chatId 형식: `dm:<상대ID>` · `room:<모임ID>` · `task:<부탁ID>`.
+ * 서버 없이 도는 데모에서는 상대의 답장을 tick()이 흉내 낸다.
+ */
 export interface ChatMessage {
   id: string
   chatId: string
@@ -140,6 +149,11 @@ export interface AppNotification {
   at: number
   read: boolean
   link?: NotificationLink
+}
+
+export interface ChatPending {
+  chatId: string
+  at: number
 }
 
 export type ToastTone = 'default' | 'leaf'

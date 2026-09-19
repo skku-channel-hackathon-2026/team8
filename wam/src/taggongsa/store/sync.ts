@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo } from 'react'
 import type { ClassBlock, SignupInput } from '@tutorial/shared'
 import { ApiError, api, apiErrorMessage } from '../lib/api'
+import { USE_SERVER } from '../config'
 import { useApp } from './context'
 
 /**
@@ -29,6 +30,7 @@ export function useProfileSync() {
 
   const signup = useCallback(
     async (input: SignupInput): Promise<void> => {
+      if (!USE_SERVER) return
       try {
         const profile = await api.signup(token, input)
         dispatch({ type: 'HYDRATE_PROFILE', profile })
@@ -49,6 +51,7 @@ export function useProfileSync() {
 
   const saveTimetable = useCallback(
     async (blocks: ClassBlock[]): Promise<void> => {
+      if (!USE_SERVER) return
       try {
         await api.saveTimetable(token, blocks)
       } catch (error) {
@@ -67,6 +70,7 @@ export function useHydrateProfile(): void {
   const token = identity.sessionToken
 
   useEffect(() => {
+    if (!USE_SERVER) return
     let cancelled = false
     void (async () => {
       try {
