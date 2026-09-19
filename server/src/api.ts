@@ -6,6 +6,15 @@ import {
   type Peer,
   type Profile,
 } from "@tutorial/shared";
+import {
+  MarketError,
+  cancelTask,
+  confirmTask,
+  createTask,
+  listTasks,
+  reportTask,
+  takeTask,
+} from "./market.js";
 import { getRecord, listRecords, putRecord } from "./records.js";
 import { readWamSessionToken, type WamSession } from "./wam-session.js";
 
@@ -109,6 +118,12 @@ const ROUTES: Record<string, string> = {
   "/api/me/timetable": "PUT",
   "/api/me/show-free": "PUT",
   "/api/students": "GET",
+  "/api/tasks": "GET",
+  "/api/tasks/create": "POST",
+  "/api/tasks/take": "POST",
+  "/api/tasks/report": "POST",
+  "/api/tasks/confirm": "POST",
+  "/api/tasks/cancel": "POST",
 };
 
 export async function handleApiRequest(
@@ -177,6 +192,32 @@ export async function handleApiRequest(
     const next: Profile = { ...profile, showFree: input.data.value };
     await putRecord("user", key, next);
     return json({ profile: next });
+  }
+
+  // ---- 공강 마켓 ----------------------------------------------------------
+  // 상태 전이와 보수 이동은 서버가 판정한다. 화면은 결과를 반영만 한다.
+  if (path.startsWith("/api/tasks")) {
+    try {
+      if (path === "/api/tasks") {
+        return json({ tasks: await listTasks(session.channelId) });
+      }
+      const body = await readJson(request);
+      if (path === "/api/tasks/create") {
+        return json(await createTask(key, session.channelId, body), 201);
+      }
+      if (path === "/api/tasks/take") return json(await takeTask(key, body));
+      if (path === "/api/tasks/report")
+        return json(await reportTask(key, body));
+      if (path === "/api/tasks/confirm") {
+        return json(await confirmTask(key, body));
+      }
+      return json(await cancelTask(key, body));
+    } catch (error) {
+      if (error instanceof MarketError) {
+        return json({ error: error.code }, error.status);
+      }
+      throw error;
+    }
   }
 
   // ---- 공강 매칭용 학생 목록 ----------------------------------------------

@@ -83,3 +83,49 @@ export async function deleteRecord(
     .bind(idOf(kind, key))
     .run();
 }
+
+/**
+ * 잔액을 SQL 안에서 더한다. 읽고-고치고-쓰는 사이에 남이 끼어들 틈이 없다.
+ * 결과가 음수가 되면 아무것도 바꾸지 않고 null을 돌려준다.
+ */
+export async function addLeaves(
+  userKey: string,
+  delta: number,
+): Promise<number | null> {
+  const row = await getDatabase()
+    .prepare(
+      `UPDATE app_records
+          SET value_json = json_set(value_json, '$.leaves',
+                json_extract(value_json, '$.leaves') + ?1),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?2
+          AND json_extract(value_json, '$.leaves') + ?1 >= 0
+       RETURNING json_extract(value_json, '$.leaves') AS leaves`,
+    )
+    .bind(delta, idOf("user", userKey))
+    .first<{ leaves: number }>();
+  return row ? row.leaves : null;
+}
+
+/**
+ * status가 기대한 값일 때만 문서를 바꾼다. 그 사이 남이 먼저 바꿨으면 false.
+ * 두 사람이 같은 부탁을 동시에 맡는 것을 막는 장치다.
+ */
+export async function replaceIfStatus(
+  kind: RecordKind,
+  key: string,
+  expected: string,
+  value: unknown,
+): Promise<boolean> {
+  const row = await getDatabase()
+    .prepare(
+      `UPDATE app_records
+          SET value_json = ?1, updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?2
+          AND json_extract(value_json, '$.status') = ?3
+       RETURNING id`,
+    )
+    .bind(JSON.stringify(value), idOf(kind, key), expected)
+    .first<{ id: string }>();
+  return row !== null;
+}

@@ -138,3 +138,52 @@ export const PeerSchema = ProfileSchema.omit({
 });
 
 export type Peer = z.infer<typeof PeerSchema>;
+
+// ---- 공강 마켓 ----
+
+export const TaskCategorySchema = z.enum(["errand", "queue", "study", "etc"]);
+export const TaskStatusSchema = z.enum([
+  "open",
+  "assigned",
+  "reported",
+  "completed",
+  "cancelled",
+]);
+
+export const TaskDraftSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  detail: z.string().trim().max(300).default(""),
+  place: z.string().trim().max(40).default(""),
+  /** 마감 시각. epoch 밀리초 */
+  deadline: z.number().int().positive(),
+  /** 예상 소요 분 */
+  duration: z.number().int().min(5).max(480),
+  reward: z.number().int().min(1).max(10_000),
+  category: TaskCategorySchema,
+});
+
+export type TaskDraft = z.infer<typeof TaskDraftSchema>;
+
+export const TaskSchema = TaskDraftSchema.extend({
+  id: z.string(),
+  channelId: z.string(),
+  requesterId: z.string(),
+  workerId: z.string().nullable(),
+  status: TaskStatusSchema,
+  createdAt: z.number().int(),
+});
+
+export type Task = z.infer<typeof TaskSchema>;
+
+export const TaskIdInputSchema = z.object({ taskId: z.string().min(1) });
+
+/** 은행잎 원장. 추가만 하고 고치지 않는다. */
+export const LedgerEntrySchema = z.object({
+  id: z.string(),
+  userId: z.string(),
+  delta: z.number().int(),
+  label: z.string(),
+  at: z.number().int(),
+});
+
+export type LedgerEntry = z.infer<typeof LedgerEntrySchema>;
