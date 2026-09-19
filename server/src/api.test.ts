@@ -794,3 +794,157 @@ test("only people in a room may invite, and members are not invited again", asyn
     ["ch1:guest"],
   );
 });
+
+// ---------------------------------------------------------------------------
+// 채팅과 은행잎 충전 — 대화 소속과 지급량을 서버가 정한다
+// ---------------------------------------------------------------------------
+
+test("charging pays the pack amount, whatever the request says", async () => {
+  const database = fakeDatabase({ "user:ch1:payer": user("payer", 0) });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  // 금액을 직접 실어 보내도 무시된다. 상품 번호만 읽는다.
+  const charged = await call("payer", "/api/leaves/charge", {
+    packIndex: 0,
+    amount: 99999,
+    price: 0,
+  });
+  assert.equal(charged?.status, 200);
+  const body = (await charged?.json()) as { leaves: number; amount: number };
+  assert.equal(body.amount, 10);
+  assert.equal(body.leaves, 10);
+
+  // 없는 상품 번호는 거절한다.
+  const bogus = await call("payer", "/api/leaves/charge", { packIndex: 99 });
+  assert.equal(bogus?.status, 400);
+});
+
+test("a room chat is closed to people who are not in the room", async () => {
+  const database = fakeDatabase({
+    "user:ch1:host": user("host", 0),
+    "user:ch1:stranger": user("stranger", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("host", "/api/rooms/create", roomDraft);
+  const { room } = (await created?.json()) as { room: { id: string } };
+  const chatId = `room:${room.id}`;
+
+  const sent = await call("host", "/api/chat/send", {
+    chatId,
+    text: "안녕하세요",
+  });
+  assert.equal(sent?.status, 201);
+
+  // 방에 없는 사람은 읽지도 쓰지도 못한다.
+  assert.equal((await call("stranger", "/api/chat", { chatId }))?.status, 403);
+  assert.equal(
+    (await call("stranger", "/api/chat/send", { chatId, text: "끼어들기" }))
+      ?.status,
+    403,
+  );
+
+  const history = await call("host", "/api/chat", { chatId });
+  const read = (await history?.json()) as { messages: { text: string }[] };
+  assert.deepEqual(
+    read.messages.map((m) => m.text),
+    ["안녕하세요"],
+  );
+});
+
+test("a direct chat opens only after the request was accepted", async () => {
+  const database = fakeDatabase({
+    "user:ch1:from": user("from", 0),
+    "user:ch1:to": user("to", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const chatId = "dm:ch1:to";
+
+  // 신청하기 전에는 열리지 않는다.
+  assert.equal(
+    (await call("from", "/api/chat/send", { chatId, text: "안녕" }))?.status,
+    403,
+  );
+
+  const sent = await call("from", "/api/requests/dm", {
+    toId: "ch1:to",
+    theme: "study",
+    message: "같이 공부해요",
+  });
+  const { request } = (await sent?.json()) as { request: { id: string } };
+
+  // 대기 중일 때도 아직 열리지 않는다.
+  assert.equal(
+    (await call("from", "/api/chat/send", { chatId, text: "안녕" }))?.status,
+    403,
+  );
+
+  await call("to", "/api/requests/respond", {
+    requestId: request.id,
+    accept: true,
+  });
+
+  // 수락된 뒤에는 양쪽 다 쓸 수 있다.
+  assert.equal(
+    (await call("from", "/api/chat/send", { chatId, text: "안녕하세요" }))
+      ?.status,
+    201,
+  );
+  assert.equal(
+    (
+      await call("to", "/api/chat/send", {
+        chatId: "dm:ch1:from",
+        text: "반가워요",
+      })
+    )?.status,
+    201,
+  );
+});
+
+test("an errand chat is open to the two people in it and nobody else", async () => {
+  const database = fakeDatabase({
+    "user:ch1:alice": user("alice", 100),
+    "user:ch1:bob": user("bob", 0),
+    "user:ch1:nosy": user("nosy", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("alice", "/api/tasks/create", draft);
+  const { task } = (await created?.json()) as { task: { id: string } };
+  const chatId = `task:${task.id}`;
+
+  // 아직 맡은 사람이 없어도 요청자는 쓸 수 있다.
+  assert.equal(
+    (await call("alice", "/api/chat/send", { chatId, text: "부탁드려요" }))
+      ?.status,
+    201,
+  );
+  // 무관한 사람은 막힌다.
+  assert.equal((await call("nosy", "/api/chat", { chatId }))?.status, 403);
+
+  await call("bob", "/api/tasks/take", { taskId: task.id });
+  // 맡은 뒤에는 작업자도 들어온다.
+  assert.equal(
+    (await call("bob", "/api/chat/send", { chatId, text: "지금 갈게요" }))
+      ?.status,
+    201,
+  );
+  assert.equal((await call("nosy", "/api/chat", { chatId }))?.status, 403);
+});

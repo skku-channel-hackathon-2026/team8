@@ -316,3 +316,52 @@ export const RespondRequestInputSchema = z.object({
 });
 
 export const RoomIdInputSchema = z.object({ roomId: z.string().min(1) });
+
+// ---- 은행잎 충전 ----
+
+/**
+ * 충전 상품표. 서버가 갖는다.
+ * 클라이언트가 금액을 정하면 잎을 원하는 만큼 찍을 수 있으므로,
+ * 요청은 상품 번호만 보내고 지급량은 여기서 읽는다.
+ */
+export const CHARGE_PACKS = [
+  { amount: 10, price: 1000 },
+  { amount: 30, price: 2900 },
+  { amount: 50, price: 4500 },
+  { amount: 100, price: 8500 },
+] as const;
+
+export const ChargeInputSchema = z.object({
+  packIndex: z
+    .number()
+    .int()
+    .min(0)
+    .max(CHARGE_PACKS.length - 1),
+});
+
+// ---- 채팅 ----
+
+/** `dm:<상대ID>` · `room:<모임ID>` · `task:<부탁ID>` */
+export const ChatIdSchema = z
+  .string()
+  .min(3)
+  .max(120)
+  .regex(/^(dm|room|task):.+$/);
+
+export const ChatMessageSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  chatId: z.string(),
+  senderId: z.string(),
+  text: z.string(),
+  at: z.number().int(),
+});
+
+export type ChatMessage = z.infer<typeof ChatMessageSchema>;
+
+export const SendChatInputSchema = z.object({
+  chatId: ChatIdSchema,
+  text: z.string().trim().min(1).max(500),
+});
+
+export const ChatHistoryInputSchema = z.object({ chatId: ChatIdSchema });

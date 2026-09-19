@@ -6,6 +6,7 @@ import {
   type Peer,
   type Profile,
 } from "@tutorial/shared";
+import { ChatError, charge, listLedger, readChat, sendChat } from "./chat.js";
 import {
   MeetError,
   createRoom,
@@ -158,6 +159,10 @@ const ROUTES: Record<string, string> = {
   "/api/requests": "GET",
   "/api/requests/dm": "POST",
   "/api/requests/respond": "POST",
+  "/api/chat": "POST",
+  "/api/chat/send": "POST",
+  "/api/leaves/charge": "POST",
+  "/api/leaves/ledger": "GET",
 };
 
 export async function handleApiRequest(
@@ -308,6 +313,28 @@ export async function handleApiRequest(
       return json(await respondRequest(key, body));
     } catch (error) {
       if (error instanceof MeetError) {
+        return json({ error: error.code }, error.status);
+      }
+      throw error;
+    }
+  }
+
+  // ---- 채팅과 은행잎 --------------------------------------------------------
+  if (path.startsWith("/api/chat") || path.startsWith("/api/leaves")) {
+    try {
+      if (path === "/api/leaves/ledger") {
+        return json({ entries: await listLedger(key) });
+      }
+      const body = await readJson(request);
+      if (path === "/api/chat") {
+        return json(await readChat(key, session.channelId, body));
+      }
+      if (path === "/api/chat/send") {
+        return json(await sendChat(key, session.channelId, body), 201);
+      }
+      return json(await charge(key, body));
+    } catch (error) {
+      if (error instanceof ChatError) {
         return json({ error: error.code }, error.status);
       }
       throw error;
