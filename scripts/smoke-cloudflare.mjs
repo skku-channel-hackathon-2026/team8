@@ -9,8 +9,12 @@ for (const path of ["/api/health", "/api/ready"]) {
   assert.equal(response.status, 200);
   const body = await response.json();
   assert.equal(body.ok, true);
-  // /api/ready는 AI 키 설정 여부도 알린다. 값은 환경마다 다르다.
-  if (path === "/api/ready") assert.equal(typeof body.ai, "boolean");
+  // /api/ready는 AI 키와 앱 비밀 키가 설정됐는지도 알린다. 값은 환경마다
+  // 다르지만, 항목 자체가 빠지면 배포된 서버를 밖에서 진단할 수 없다.
+  if (path === "/api/ready") {
+    assert.equal(typeof body.ai, "boolean");
+    assert.equal(typeof body.auth, "boolean");
+  }
 }
 const body =
   '{ "method": "extension.command.metadata.getCommands", "params": {} }';
