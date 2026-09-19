@@ -1,4 +1,5 @@
 import { createContext, useContext, type Dispatch } from 'react'
+import type { ChannelIdentity } from '../lib/identity'
 import type { Moment, Profile } from '../types'
 import type { Action, AppState } from './state'
 
@@ -7,6 +8,8 @@ export interface AppContextValue {
   dispatch: Dispatch<Action>
   now: Moment
   me: Profile | null
+  /** 채널톡이 보증한 현재 사용자. 서버 호출과 저장소 구분의 기준이다. */
+  identity: ChannelIdentity
 }
 
 export const AppContext = createContext<AppContextValue | null>(null)
@@ -48,4 +51,9 @@ export function useNav(): NavValue {
   const value = useContext(NavContext)
   if (!value) throw new Error('useNav must be used inside the app shell')
   return value
+}
+
+/** 서버·DB 기록에 쓸 현재 사용자 키. */
+export function useIdentity(): ChannelIdentity {
+  return useApp().identity
 }

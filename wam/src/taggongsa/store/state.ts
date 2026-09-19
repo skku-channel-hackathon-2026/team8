@@ -22,6 +22,7 @@ import type {
 import { ME, buildSeed } from '../data/seed'
 import { REWARDS, STEP_INFO, THEME_LABEL } from '../data/labels'
 import { hashPick, hashString, uid } from '../lib/id'
+import type { ChannelIdentity } from '../lib/identity'
 import { isVisiblyFree, momentFromDate } from '../lib/time'
 
 export { ME }
@@ -33,7 +34,9 @@ export interface TutorialState {
 }
 
 export interface AppState {
-  version: 2
+  version: 3
+  /** 채널톡이 준 현재 사용자. 저장된 값이 아니라 항상 호스트에서 다시 받는다. */
+  identity: ChannelIdentity
   profile: Profile | null
   tutorial: TutorialState
   students: Student[]
@@ -120,9 +123,10 @@ export const DEFAULT_CLOCK: ClockSetting = {
   minutes: 13 * 60 + 10,
 }
 
-export function createInitialState(): AppState {
+export function createInitialState(identity: ChannelIdentity): AppState {
   return {
-    version: 2,
+    version: 3,
+    identity,
     profile: null,
     tutorial: {
       done: [false, false, false, false],
@@ -324,6 +328,8 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'SIGN_UP': {
       const profile: Profile = {
         id: ME,
+        channelId: state.identity.channelId,
+        managerId: state.identity.managerId,
         nickname: action.nickname,
         department: action.department,
         campus: action.campus,
@@ -349,6 +355,8 @@ export function reducer(state: AppState, action: Action): AppState {
       return toast(
         {
           ...action.state,
+          // 저장된 신원은 믿지 않는다. 지금 호스트가 준 값이 기준이다.
+          identity: state.identity,
           clock: action.state.clock ?? DEFAULT_CLOCK,
           toasts: [],
         },
@@ -356,7 +364,7 @@ export function reducer(state: AppState, action: Action): AppState {
       )
 
     case 'LOG_OUT':
-      return createInitialState()
+      return createInitialState(state.identity)
 
     case 'SET_TIMETABLE': {
       if (!state.profile) return state

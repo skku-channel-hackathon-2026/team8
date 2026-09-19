@@ -10,10 +10,11 @@ import {
   type Route,
 } from './store/context'
 import type { Toast } from './types'
+import { useChannelIdentity } from './lib/identity'
 import { DAY_LABELS, fmt } from './lib/time'
 import { Icon } from './ui/Icon'
 import { Leaf } from './ui/Mascot'
-import { IconButton } from './ui/primitives'
+import { Empty, IconButton } from './ui/primitives'
 import { MarketScreen } from './screens/Market'
 import { MeetScreen, RoomScreen } from './screens/Meet'
 import { MenuScreen } from './screens/Menu'
@@ -240,13 +241,30 @@ export default function TaggongsaApp() {
   const { setSize } = useWamSize()
   const appearance = useWamData('appearance')
   const theme = readTheme(appearance)
+  const identity = useChannelIdentity()
 
   useEffect(() => {
     setSize(WAM_SIZE)
   }, [setSize])
 
+  // 신원을 못 받으면 남의 기록을 건드릴 수 있으므로 화면을 열지 않는다.
+  if (identity.status === 'error') {
+    return (
+      <div
+        className="tg-app"
+        data-theme={theme}
+      >
+        <Empty
+          mood="wow"
+          title="사용자 정보를 확인하지 못했어요"
+          body={identity.message}
+        />
+      </div>
+    )
+  }
+
   return (
-    <AppProvider>
+    <AppProvider identity={identity.identity}>
       <div
         className="tg-app"
         data-theme={theme}

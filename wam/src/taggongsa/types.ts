@@ -26,6 +26,9 @@ export interface Student {
 
 export interface Profile extends Student {
   leaves: number
+  /** 채널톡이 보증한 신원. 서버·DB에 기록을 저장할 때 이 값이 키가 된다. */
+  channelId: string
+  managerId: string
 }
 
 export type MissionCategory = 'campus' | 'academic' | 'life' | 'digital'

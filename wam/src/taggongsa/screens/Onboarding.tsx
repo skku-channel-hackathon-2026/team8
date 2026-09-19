@@ -9,6 +9,7 @@ import {
   ROLE_LABEL,
 } from '../data/labels'
 import type { Campus, Role } from '../types'
+import { scopeOf } from '../lib/identity'
 import { loadAccounts } from '../lib/storage'
 import { Icon } from '../ui/Icon'
 import { Leaf, Mascot } from '../ui/Mascot'
@@ -80,17 +81,18 @@ export function Login({
   onBack: () => void
   onSignup: () => void
 }) {
-  const { dispatch } = useApp()
-  const accounts = useMemo(() => loadAccounts<AppState>(), [])
+  const { dispatch, identity } = useApp()
+  const scope = scopeOf(identity)
+  const accounts = useMemo(() => loadAccounts<AppState>(scope), [scope])
   const saved = Object.values(accounts).filter(
-    (account) => account.version === 2 && account.profile
+    (account) => account.version === 3 && account.profile
   )
   const [nickname, setNickname] = useState('')
   const [error, setError] = useState('')
 
   const login = (name: string) => {
     const account = accounts[name.trim()]
-    if (!account || account.version !== 2 || !account.profile) {
+    if (!account || account.version !== 3 || !account.profile) {
       setError(`'${name.trim()}' 별명으로 가입한 계정이 이 기기에 없어요.`)
       return
     }
@@ -214,7 +216,8 @@ const CAMPUSES: Campus[] = ['humanities', 'natural']
 const NICK_MAX = 10
 
 export function Signup({ onBack }: { onBack: () => void }) {
-  const { dispatch } = useApp()
+  const { dispatch, identity } = useApp()
+  const scope = scopeOf(identity)
   const [step, setStep] = useState(0)
   const [role, setRole] = useState<Role | null>(null)
   const [campus, setCampus] = useState<Campus | null>(null)
@@ -231,8 +234,8 @@ export function Signup({ onBack }: { onBack: () => void }) {
 
   const trimmedNick = nickname.trim()
   const taken = useMemo(
-    () => trimmedNick !== '' && trimmedNick in loadAccounts(),
-    [trimmedNick]
+    () => trimmedNick !== '' && trimmedNick in loadAccounts(scope),
+    [trimmedNick, scope]
   )
   const nickError =
     trimmedNick.length > 0 && trimmedNick.length < 2
