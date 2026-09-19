@@ -68,3 +68,73 @@ export type WriteGroupMessageAsManagerInput = {
     managerId: string;
   };
 };
+
+// ---------------------------------------------------------------------------
+// 타공사 API 계약. 서버가 검증하고 WAM이 같은 타입을 쓴다.
+// ---------------------------------------------------------------------------
+
+export const CampusSchema = z.enum(["humanities", "natural"]);
+export const RoleSchema = z.enum(["fresh", "senior"]);
+
+/** 수업 한 칸. day: 0=월 … 4=금, start/end: 자정부터 흐른 분 */
+export const ClassBlockSchema = z.object({
+  id: z.string().min(1).max(64),
+  name: z.string().min(1).max(60),
+  day: z.number().int().min(0).max(4),
+  start: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60),
+  end: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60),
+  place: z.string().max(40).default(""),
+});
+
+export type ClassBlock = z.infer<typeof ClassBlockSchema>;
+
+export const SignupInputSchema = z.object({
+  nickname: z.string().trim().min(2).max(10),
+  department: z.string().trim().min(1).max(40),
+  campus: CampusSchema,
+  role: RoleSchema,
+});
+
+export type SignupInput = z.infer<typeof SignupInputSchema>;
+
+export const TimetableInputSchema = z.object({
+  blocks: z.array(ClassBlockSchema).max(60),
+});
+
+export const ShowFreeInputSchema = z.object({ value: z.boolean() });
+
+/** 서버가 돌려주는 내 프로필. id는 채널톡 신원에서 파생되며 클라가 못 고른다. */
+export const ProfileSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  managerId: z.string(),
+  nickname: z.string(),
+  department: z.string(),
+  campus: CampusSchema,
+  role: RoleSchema,
+  showFree: z.boolean(),
+  tone: z.number().int(),
+  leaves: z.number().int(),
+  timetable: z.array(ClassBlockSchema),
+  createdAt: z.number().int(),
+});
+
+export type Profile = z.infer<typeof ProfileSchema>;
+
+/** 다른 학생에게 공개되는 정보. 신원(managerId)과 은행잎은 빼고 보낸다. */
+export const PeerSchema = ProfileSchema.omit({
+  managerId: true,
+  channelId: true,
+  leaves: true,
+  createdAt: true,
+});
+
+export type Peer = z.infer<typeof PeerSchema>;
