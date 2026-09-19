@@ -86,10 +86,6 @@ export function MenuScreen() {
               {item.badge}
             </span>
           )}
-          <Icon
-            name="chevron"
-            size={20}
-          />
         </button>
       ))}
     </nav>

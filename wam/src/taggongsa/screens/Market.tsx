@@ -75,6 +75,7 @@ function TaskMeta({ task, now }: { task: Task; now: Moment }) {
 function TakeSheet({ task, onClose }: { task: Task; onClose: () => void }) {
   const { state, dispatch, now } = useApp()
   const me = useMe()
+  const { push } = useNav()
   const requester = findPerson(state, task.requesterId)
   const myUntil = freeUntil(me.timetable, now)
   const tight = myUntil !== null && now.minutes + task.duration > myUntil
@@ -90,6 +91,11 @@ function TakeSheet({ task, onClose }: { task: Task; onClose: () => void }) {
           onClick={() => {
             dispatch({ type: 'TAKE_TASK', taskId: task.id })
             onClose()
+            push({
+              name: 'chat',
+              chatId: `task:${task.id}`,
+              title: requester?.nickname,
+            })
           }}
         >
           수락하고 {task.reward}잎 받기
@@ -400,7 +406,14 @@ function TaskCard({
 
 function MyJob({ task }: { task: Task }) {
   const { state, dispatch, now } = useApp()
+  const { push } = useNav()
   const requester = findPerson(state, task.requesterId)
+  const openChat = () =>
+    push({
+      name: 'chat',
+      chatId: `task:${task.id}`,
+      title: requester?.nickname,
+    })
   return (
     <Card tone="blue">
       <div className="tg-stack tg-stack--sm">
@@ -414,22 +427,33 @@ function MyJob({ task }: { task: Task }) {
           now={now}
         />
         <p className="tg-caption">{requester?.nickname}님의 부탁이에요</p>
-        {task.status === 'assigned' ? (
+        <div className="tg-row">
+          {task.status === 'assigned' ? (
+            <Button
+              variant="dark"
+              className="tg-grow"
+              icon="check"
+              onClick={() => dispatch({ type: 'REPORT_TASK', taskId: task.id })}
+            >
+              완료 보고하기
+            </Button>
+          ) : (
+            <Button
+              variant="soft"
+              className="tg-grow"
+              disabled
+            >
+              {requester?.nickname}님의 확인을 기다리는 중
+            </Button>
+          )}
           <Button
-            variant="dark"
-            icon="check"
-            onClick={() => dispatch({ type: 'REPORT_TASK', taskId: task.id })}
+            variant="outline"
+            icon="send"
+            onClick={openChat}
           >
-            완료 보고하기
+            채팅
           </Button>
-        ) : (
-          <Button
-            variant="soft"
-            disabled
-          >
-            {requester?.nickname}님의 확인을 기다리는 중
-          </Button>
-        )}
+        </div>
       </div>
     </Card>
   )
@@ -437,6 +461,7 @@ function MyJob({ task }: { task: Task }) {
 
 function MyRequest({ task }: { task: Task }) {
   const { state, dispatch, now } = useApp()
+  const { push } = useNav()
   const worker = task.workerId ? findPerson(state, task.workerId) : undefined
   const label: Record<Task['status'], string> = {
     open: '공강인 사람을 찾는 중',
@@ -470,13 +495,29 @@ function MyRequest({ task }: { task: Task }) {
         now={now}
       />
       {worker && task.status !== 'open' && (
-        <span className="tg-row tg-caption">
-          <Avatar
-            person={worker}
-            size={24}
-          />
-          {worker.nickname} · {worker.department}
-        </span>
+        <div className="tg-row tg-row--between">
+          <span className="tg-row tg-caption">
+            <Avatar
+              person={worker}
+              size={24}
+            />
+            {worker.nickname} · {worker.department}
+          </span>
+          <Button
+            size="sm"
+            variant="outline"
+            icon="send"
+            onClick={() =>
+              push({
+                name: 'chat',
+                chatId: `task:${task.id}`,
+                title: worker.nickname,
+              })
+            }
+          >
+            채팅
+          </Button>
+        </div>
       )}
       {task.status === 'open' && (
         <Button

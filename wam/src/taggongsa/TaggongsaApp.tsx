@@ -9,12 +9,15 @@ import {
   type NavValue,
   type Route,
 } from './store/context'
+import { ThemeContext } from './store/theme'
 import type { Toast } from './types'
 import { useChannelIdentity } from './lib/identity'
+import { loadThemePref, saveThemePref, type ThemePref } from './lib/theme'
 import { DAY_LABELS, fmt } from './lib/time'
 import { Icon } from './ui/Icon'
 import { Leaf, Mascot } from './ui/Mascot'
 import { Empty, IconButton } from './ui/primitives'
+import { ChatScreen } from './screens/Chat'
 import { MarketScreen } from './screens/Market'
 import { MeetScreen, RoomScreen } from './screens/Meet'
 import { MenuScreen } from './screens/Menu'
@@ -32,6 +35,12 @@ const ROUTE_TITLE: Record<Route['name'], string> = {
   my: '마이페이지',
   timetable: '시간표',
   room: '모임방',
+  chat: '채팅',
+}
+
+function routeTitle(route: Route): string {
+  if (route.name === 'chat') return route.title ?? ROUTE_TITLE.chat
+  return ROUTE_TITLE[route.name]
 }
 
 function ToastItem({ toast }: { toast: Toast }) {
@@ -100,6 +109,13 @@ function renderRoute(route: Route) {
         <RoomScreen
           key={route.roomId}
           roomId={route.roomId}
+        />
+      )
+    case 'chat':
+      return (
+        <ChatScreen
+          key={route.chatId}
+          chatId={route.chatId}
         />
       )
   }
@@ -183,7 +199,7 @@ function Shell() {
               label="뒤로"
               onClick={nav.back}
             />
-            <span className="tg-header__title">{ROUTE_TITLE[top.name]}</span>
+            <span className="tg-header__title">{routeTitle(top)}</span>
             {state.clock.mode === 'demo' && (
               <button
                 type="button"
@@ -230,50 +246,66 @@ function Shell() {
   )
 }
 
-function readTheme(appearance: unknown): 'light' | 'dark' {
+/**
+ * 우선순위: 주소창 ?theme= (시연·테스트용) > 사용자가 이 기기에서 고른 값 >
+ * 채널톡 호스트의 라이트/다크 설정.
+ */
+function readTheme(appearance: unknown, pref: ThemePref): 'light' | 'dark' {
   try {
     const forced = new URLSearchParams(window.location.search).get('theme')
     if (forced === 'dark' || forced === 'light') return forced
   } catch {
-    // 주소를 읽을 수 없으면 채널톡 설정을 따른다.
+    // 주소를 읽을 수 없으면 다음 우선순위로 넘어간다.
   }
+  if (pref === 'light' || pref === 'dark') return pref
   return appearance === 'dark' ? 'dark' : 'light'
 }
 
 export default function TaggongsaApp() {
   const { setSize } = useWamSize()
   const appearance = useWamData('appearance')
-  const theme = readTheme(appearance)
+  const [pref, setPref] = useState<ThemePref>(loadThemePref)
+  const theme = readTheme(appearance, pref)
   const identity = useChannelIdentity()
 
   useEffect(() => {
     setSize(WAM_SIZE)
   }, [setSize])
 
+  useEffect(() => {
+    saveThemePref(pref)
+  }, [pref])
+
+  const themeValue = useMemo(() => ({ theme, pref, setPref }), [theme, pref])
+
   // 신원을 못 받으면 남의 기록을 건드릴 수 있으므로 화면을 열지 않는다.
   if (identity.status === 'error') {
     return (
-      <div
-        className="tg-app"
-        data-theme={theme}
-      >
-        <Empty
-          mood="wow"
-          title="사용자 정보를 확인하지 못했어요"
-          body={identity.message}
-        />
-      </div>
+      <ThemeContext.Provider value={themeValue}>
+        <div
+          className="tg-app"
+          data-theme={theme}
+        >
+          <Empty
+            mood="wow"
+            title="사용자 정보를 확인하지 못했어요"
+            body={identity.message}
+          />
+        </div>
+      </ThemeContext.Provider>
     )
   }
 
   return (
-    <AppProvider identity={identity.identity}>
-      <div
-        className="tg-app"
-        data-theme={theme}
-      >
-        <Shell />
-      </div>
-    </AppProvider>
+    <ThemeContext.Provider value={themeValue}>
+      <AppProvider identity={identity.identity}>
+        <div
+          className="tg-app"
+          data-theme={theme}
+        >
+          <Shell />
+        </div>
+      </AppProvider>
+    </ThemeContext.Provider>
   )
 }

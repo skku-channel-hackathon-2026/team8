@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { useApp, useMe, useNav } from '../store/context'
 import { DEFAULT_CLOCK, ME } from '../store/state'
+import { useTheme } from '../store/theme'
 import { CAMPUS_LABEL, ROLE_LABEL } from '../data/labels'
 import type { ClockSetting } from '../types'
 import { cx } from '../lib/cx'
@@ -242,6 +243,7 @@ export function MyPage() {
   const { state, dispatch, now } = useApp()
   const me = useMe()
   const { push, openSheet } = useNav()
+  const { theme, setPref } = useTheme()
   const [showLedger, setShowLedger] = useState(false)
   const [logoutOpen, setLogoutOpen] = useState(false)
 
@@ -283,7 +285,7 @@ export function MyPage() {
                 ['추가 튜토리얼', `${approved}개`],
               ]
             : [
-                ['만든 미션', `${madeMissions}개`],
+                ['만든 튜토리얼', `${madeMissions}개`],
                 ['확인한 인증', `${reviewed}건`],
               ]
           ).map(([label, value]) => (
@@ -428,6 +430,15 @@ export function MyPage() {
       <div className="tg-stack tg-stack--sm">
         <SectionHead title="설정" />
         <div className="tg-list">
+          <div className="tg-listitem">
+            <Icon name={theme === 'dark' ? 'moon' : 'sun'} />
+            <span className="tg-grow tg-strong">다크 모드</span>
+            <Switch
+              label="다크 모드"
+              checked={theme === 'dark'}
+              onChange={(value) => setPref(value ? 'dark' : 'light')}
+            />
+          </div>
           <button
             type="button"
             className="tg-listitem tg-checkrow"

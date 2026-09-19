@@ -178,6 +178,17 @@ const PATHS = {
     </>
   ),
   bolt: <path d="M13 2.5 4.5 13.5H11l-1 8 8.5-11H12z" />,
+  sun: (
+    <>
+      <circle
+        cx="12"
+        cy="12"
+        r="4.5"
+      />
+      <path d="M12 2.5v3M12 18.5v3M4.2 4.2l2.1 2.1M17.7 17.7l2.1 2.1M2.5 12h3M18.5 12h3M4.2 19.8l2.1-2.1M17.7 6.3l2.1-2.1" />
+    </>
+  ),
+  moon: <path d="M20 14.2A8.5 8.5 0 1 1 9.8 4a7 7 0 0 0 10.2 10.2z" />,
 } satisfies Record<string, ReactNode>
 
 export type IconName = keyof typeof PATHS
