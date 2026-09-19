@@ -1,5 +1,5 @@
 <!doctype html>
-<html>
+<html lang="ko">
   <head>
     <meta charset="UTF-8" />
     <meta
@@ -8,13 +8,22 @@
     />
     <link
       rel="preconnect"
-      href="https://cf.channel.io"
+      href="https://fonts.googleapis.com"
+    />
+    <link
+      rel="preconnect"
+      href="https://fonts.gstatic.com"
+      crossorigin
     />
     <link
       rel="stylesheet"
-      href="https://cf.channel.io/asset/font/Inter/inter.css"
+      href="https://fonts.googleapis.com/css2?family=Noto+Serif+KR:wght@700;900&display=swap"
     />
-    <title>Tutorial</title>
+    <link
+      rel="stylesheet"
+      href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/variable/pretendardvariable-dynamic-subset.min.css"
+    />
+    <title>타공사</title>
   </head>
   <body>
     <div id="root"></div>
@@ -23,11 +32,14 @@
       src="/src/main.tsx"
     ></script>
     <script>
-      var appearance = ChannelIOWam.getWamData('appearance')
-      if (appearance === 'dark') {
-        document.body.style.backgroundColor = '#464748'
-      } else {
-        document.body.style.backgroundColor = '#FFFFFF'
+      // 채널톡 밖(로컬 미리보기)에서는 ChannelIOWam이 없으므로 확인 후 사용한다.
+      try {
+        var dark =
+          window.ChannelIOWam &&
+          window.ChannelIOWam.getWamData('appearance') === 'dark'
+        document.body.style.backgroundColor = dark ? '#1B1916' : '#F5F0E6'
+      } catch (error) {
+        document.body.style.backgroundColor = '#F5F0E6'
       }
     </script>
   </body>

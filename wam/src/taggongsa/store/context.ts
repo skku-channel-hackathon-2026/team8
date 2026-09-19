@@ -1,0 +1,52 @@
+import { createContext, useContext, type Dispatch } from 'react'
+import type { Moment, Profile } from '../types'
+import type { Action, AppState } from './state'
+
+export interface AppContextValue {
+  state: AppState
+  dispatch: Dispatch<Action>
+  now: Moment
+  me: Profile | null
+}
+
+export const AppContext = createContext<AppContextValue | null>(null)
+
+export function useApp(): AppContextValue {
+  const value = useContext(AppContext)
+  if (!value) throw new Error('useApp must be used inside AppProvider')
+  return value
+}
+
+/** 로그인 후에만 쓰는 화면에서 사용한다. */
+export function useMe(): Profile {
+  const { me } = useApp()
+  if (!me) throw new Error('로그인이 필요한 화면이에요')
+  return me
+}
+
+export type TabId = 'home' | 'meet' | 'market' | 'my'
+
+export type Route =
+  | { name: 'tutorial' }
+  | { name: 'timetable' }
+  | { name: 'room'; roomId: string }
+
+export type GlobalSheet = 'charge' | 'clock' | null
+
+export interface NavValue {
+  tab: TabId
+  hint: string | null
+  stack: Route[]
+  goTab: (tab: TabId, hint?: string) => void
+  push: (route: Route) => void
+  back: () => void
+  openSheet: (sheet: GlobalSheet) => void
+}
+
+export const NavContext = createContext<NavValue | null>(null)
+
+export function useNav(): NavValue {
+  const value = useContext(NavContext)
+  if (!value) throw new Error('useNav must be used inside the app shell')
+  return value
+}
