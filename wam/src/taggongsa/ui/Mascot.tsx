@@ -7,9 +7,18 @@ const SPROUT = '#32b802'
 const EYE = '#3b2e24'
 const BEAK = '#ef9a4a'
 
+/** 이파리 색. 줄기와 몸통은 variant와 무관하게 그대로 둔다. */
+const LEAF: Record<Variant, string> = {
+  // 헌내기는 잎이 물든 새싹으로 그려 새내기와 한눈에 구분되게 한다.
+  orange: '#f0a04b',
+  gold: SPROUT,
+  green: SPROUT,
+}
+
 /**
  * 타공사 로고의 새싹 병아리.
- * green은 막 돋은 새싹(새내기), gold는 잎이 자란 새싹(헌내기), orange는 볼이 빨간 병아리.
+ * green은 막 돋은 작은 새싹(새내기), orange는 잎이 물든 새싹(헌내기),
+ * gold는 로고와 같은 초록 잎 기본형.
  */
 export function Mascot({
   size = 96,
@@ -23,6 +32,7 @@ export function Mascot({
   className?: string
 }) {
   const bigLeaves = color !== 'green'
+  const leaf = LEAF[color]
   const eyeR = mood === 'wow' ? 4.6 : 3.8
   return (
     <svg
@@ -42,22 +52,22 @@ export function Mascot({
         <>
           <path
             d="M60 31c-6-10-18-13-28-9 5 9 17 13 28 9Z"
-            fill={SPROUT}
+            fill={leaf}
           />
           <path
             d="M60 31c7-11 20-14 31-9-5 10-19 14-31 9Z"
-            fill={SPROUT}
+            fill={leaf}
           />
         </>
       ) : (
         <>
           <path
             d="M60 33c-4-7-11-9-17-6 3 6 10 8 17 6Z"
-            fill={SPROUT}
+            fill={leaf}
           />
           <path
             d="M60 33c4-7 12-9 18-6-3 6-11 8-18 6Z"
-            fill={SPROUT}
+            fill={leaf}
           />
         </>
       )}
