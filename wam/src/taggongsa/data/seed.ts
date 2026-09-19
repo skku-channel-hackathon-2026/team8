@@ -21,6 +21,23 @@ function hm(value: string): number {
   return h * 60 + m
 }
 
+/** 시드가 쓰인 기준 시각. 이 앱의 데모는 원래 수요일 13:10에 맞춰 짜였다. */
+const SEED_ANCHOR = hm('13:10')
+const LAST_SLOT = hm('23:50')
+
+/**
+ * 시드 시각을 지금 기준으로 민다.
+ *
+ * 마감이 13:50처럼 박혀 있으면, 오후 늦게 데모를 켠 순간 마켓이 통째로
+ * '마감'으로 보인다. 서로의 앞뒤 간격은 그대로 두고 통째로 옮겨, 언제
+ * 열어도 남은 시간이 살아 있게 한다.
+ */
+function ahead(value: string, base: number): number {
+  const now = new Date(base)
+  const shift = now.getHours() * 60 + now.getMinutes() - SEED_ANCHOR
+  return Math.min(hm(value) + shift, LAST_SLOT)
+}
+
 let classSeq = 0
 function c(
   name: string,
@@ -252,7 +269,7 @@ export function buildSeed(base = Date.now()) {
       title: '보드게임 한 판 할 사람',
       theme: 'play',
       place: '학생회관 3층 라운지',
-      until: hm('14:30'),
+      until: ahead('14:30', base),
       max: 5,
       hostId: 's1',
       memberIds: ['s1', 's5'],
@@ -264,7 +281,7 @@ export function buildSeed(base = Date.now()) {
       title: '미적분 과제 같이 풀어요',
       theme: 'study',
       place: '수선관 1층 스터디카페',
-      until: hm('15:00'),
+      until: ahead('15:00', base),
       max: 4,
       hostId: 's2',
       memberIds: ['s2', 's3', 's9'],
@@ -276,7 +293,7 @@ export function buildSeed(base = Date.now()) {
       title: '명륜당 산책하고 사진 찍기',
       theme: 'play',
       place: '명륜당 앞',
-      until: hm('14:00'),
+      until: ahead('14:00', base),
       max: 6,
       hostId: 's7',
       memberIds: ['s7'],
@@ -288,7 +305,7 @@ export function buildSeed(base = Date.now()) {
       title: '중간고사 대비 카공',
       theme: 'study',
       place: '600주년기념관 카페',
-      until: hm('16:30'),
+      until: ahead('16:30', base),
       max: 6,
       hostId: 's10',
       memberIds: ['s10'],
@@ -300,7 +317,7 @@ export function buildSeed(base = Date.now()) {
       title: '반도체관 앞 배드민턴 한 게임',
       theme: 'play',
       place: '반도체관 앞 잔디밭',
-      until: hm('15:00'),
+      until: ahead('15:00', base),
       max: 4,
       hostId: 's14',
       memberIds: ['s14', 's16'],
@@ -312,7 +329,7 @@ export function buildSeed(base = Date.now()) {
       title: '일반물리 과제 같이 풀어요',
       theme: 'study',
       place: '삼성학술정보관 그룹스터디룸',
-      until: hm('15:00'),
+      until: ahead('15:00', base),
       max: 4,
       hostId: 's13',
       memberIds: ['s13', 's2'],
@@ -352,7 +369,7 @@ export function buildSeed(base = Date.now()) {
       detail:
         '학생회관 2층 프린터에서 PDF 10장을 출력해서 경영관 1층 로비로 가져다 주세요. 파일은 수락하면 바로 보내드려요.',
       place: '학생회관 → 경영관 1층',
-      deadline: hm('13:50'),
+      deadline: ahead('13:50', base),
       duration: 20,
       reward: 10,
       category: 'errand',
@@ -366,7 +383,7 @@ export function buildSeed(base = Date.now()) {
       detail:
         '14:15에 수업이 끝나자마자 먹을 수 있게 13:55쯤부터 줄을 서 주세요. 제 식권은 미리 사둘게요.',
       place: '학생회관 식당',
-      deadline: hm('14:15'),
+      deadline: ahead('14:15', base),
       duration: 20,
       reward: 8,
       category: 'queue',
@@ -379,7 +396,7 @@ export function buildSeed(base = Date.now()) {
       title: '경제수학 과제 질문 봐주실 분',
       detail: '편미분 부분에서 막혔어요. 30분만 같이 봐 주시면 돼요.',
       place: '다산경제관 1층 라운지',
-      deadline: hm('15:30'),
+      deadline: ahead('15:30', base),
       duration: 30,
       reward: 20,
       category: 'study',
@@ -393,7 +410,7 @@ export function buildSeed(base = Date.now()) {
       detail:
         '법학관 4층 사물함에서 민법 교재를 꺼내 14:45 수업 끝날 때 강의실 앞으로 가져다 주세요. 비밀번호는 수락 후 알려드려요.',
       place: '법학관 4층',
-      deadline: hm('14:45'),
+      deadline: ahead('14:45', base),
       duration: 15,
       reward: 8,
       category: 'errand',
@@ -407,7 +424,7 @@ export function buildSeed(base = Date.now()) {
       detail:
         '문학 동아리 모집 포스터를 게시판 다섯 곳에 붙여 주세요. 위치는 사진으로 알려드려요.',
       place: '호암관·수선관 게시판',
-      deadline: hm('16:30'),
+      deadline: ahead('16:30', base),
       duration: 30,
       reward: 12,
       category: 'etc',
@@ -421,7 +438,7 @@ export function buildSeed(base = Date.now()) {
       detail:
         '수업 끝나고 바로 회의라 시간이 없어요. 아이스 아메리카노 두 잔 부탁해요. 커피값은 따로 보내드려요.',
       place: '퇴계인문관 1층',
-      deadline: hm('13:45'),
+      deadline: ahead('13:45', base),
       duration: 15,
       reward: 6,
       category: 'errand',
@@ -435,7 +452,7 @@ export function buildSeed(base = Date.now()) {
       detail:
         '발표 슬라이드 12장을 템플릿에 맞춰 정리해 주세요. 두 시간 정도 걸려요.',
       place: '경영관 2층 라운지',
-      deadline: hm('17:30'),
+      deadline: ahead('17:30', base),
       duration: 120,
       reward: 30,
       category: 'study',
@@ -449,7 +466,7 @@ export function buildSeed(base = Date.now()) {
       detail:
         '시험 기간이라 자리가 금방 차요. 제 수업이 끝날 때까지 자리를 지켜 주시면 돼요.',
       place: '중앙학술정보관 3층 열람실',
-      deadline: hm('16:00'),
+      deadline: ahead('16:00', base),
       duration: 150,
       reward: 15,
       category: 'queue',
@@ -462,7 +479,7 @@ export function buildSeed(base = Date.now()) {
       title: '택배 하나 대신 부쳐 주세요',
       detail: '상자 하나만 부치면 돼요. 우체국이 13:30에 문을 닫아서 급해요.',
       place: '학생회관 우체국',
-      deadline: hm('13:30'),
+      deadline: ahead('13:30', base),
       duration: 30,
       reward: 10,
       category: 'errand',

@@ -4,12 +4,13 @@ import { scopeOf, type ChannelIdentity } from '../lib/identity'
 import { momentFromDate } from '../lib/time'
 import { AppContext } from './context'
 import { useServerBridge } from './bridge'
+import { USE_SERVER } from '../config'
 import { createInitialState, reducer, type AppState } from './state'
 
 function loadInitial(identity: ChannelIdentity): AppState {
   const initial = createInitialState(identity)
   const saved = loadSaved<AppState>(scopeOf(identity))
-  if (!saved || saved.version !== 5) return initial
+  if (!saved || saved.version !== 6) return initial
   // 저장된 신원은 믿지 않고 지금 호스트가 준 신원으로 덮어쓴다.
   // synced는 이번 실행에서 서버를 만났는지를 뜻하므로 항상 false로 시작한다.
   return { ...initial, ...saved, identity, toasts: [], synced: false }
@@ -33,7 +34,19 @@ export function AppProvider({
   }, [state, scope])
 
   // 화면의 동작을 서버로 넘기고, 다른 사람이 한 일을 받아 온다.
+  // 서버를 쓰지 않을 때는 이 다리가 아무것도 보내지 않고 dispatch를 그대로 준다.
   const bridged = useServerBridge(state, dispatch)
+
+  // 서버가 없으면 상대가 하는 일을 tick()이 흉내 낸다. 신청 수락, 부탁 맡기,
+  // 채팅 답장이 여기서 시간에 맞춰 일어난다.
+  useEffect(() => {
+    if (USE_SERVER) return
+    const timer = window.setInterval(
+      () => dispatch({ type: 'TICK', now: Date.now() }),
+      1000
+    )
+    return () => window.clearInterval(timer)
+  }, [])
 
   // 지금이 공강인지 판단하는 기준 시각. 30초마다 실제 시각으로 갱신한다.
   useEffect(() => {

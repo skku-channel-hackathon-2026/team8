@@ -85,14 +85,14 @@ export function Login({
   const scope = scopeOf(identity)
   const accounts = useMemo(() => loadAccounts<AppState>(scope), [scope])
   const saved = Object.values(accounts).filter(
-    (account) => account.version === 5 && account.profile
+    (account) => account.version === 6 && account.profile
   )
   const [nickname, setNickname] = useState('')
   const [error, setError] = useState('')
 
   const login = (name: string) => {
     const account = accounts[name.trim()]
-    if (!account || account.version !== 5 || !account.profile) {
+    if (!account || account.version !== 6 || !account.profile) {
       setError(`'${name.trim()}' 별명으로 가입한 계정이 이 기기에 없어요.`)
       return
     }

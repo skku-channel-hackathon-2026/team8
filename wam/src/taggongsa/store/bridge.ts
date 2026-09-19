@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, type Dispatch } from 'react'
 import { CHARGE_PACKS } from '@tutorial/shared'
 import { ApiError, api, apiErrorMessage } from '../lib/api'
+import { USE_SERVER } from '../config'
 import { toLocalSnapshot } from './mirror'
 import type { Action, AppState } from './state'
 
@@ -43,6 +44,7 @@ export function useServerBridge(
 
   const refresh = useCallback(
     async (force = false): Promise<void> => {
+      if (!USE_SERVER) return
       try {
         const snapshot = await api.getSnapshot(token)
         const fingerprint = JSON.stringify(snapshot)
@@ -78,6 +80,10 @@ export function useServerBridge(
     (action: Action): void => {
       // 화면은 먼저 그린다.
       dispatch(action)
+
+      // 서버를 쓰지 않으면 여기서 끝이다. reducer가 모든 판정을 맡고,
+      // 상대가 할 일은 tick()이 흉내 낸다.
+      if (!USE_SERVER) return
 
       switch (action.type) {
         case 'COMPLETE_STEP':
@@ -154,6 +160,7 @@ export function useServerBridge(
 
   // 다른 사람이 한 일을 알아채려고 일정 간격으로 다시 받아 온다.
   useEffect(() => {
+    if (!USE_SERVER) return
     void refresh()
     const timer = window.setInterval(() => void refresh(), POLL_MS)
     return () => window.clearInterval(timer)
