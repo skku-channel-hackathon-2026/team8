@@ -16,6 +16,7 @@ import { useChannelIdentity } from './lib/identity'
 import { loadThemePref, saveThemePref, type ThemePref } from './lib/theme'
 import { useKeyboardAwareViewport } from './lib/viewport'
 import { bootChannelTalk, openChannelTalk } from './lib/channelTalk'
+import { ChannelTalkLogo } from './ui/ChannelTalkLogo'
 import { Icon } from './ui/Icon'
 import { Leaf, Mascot } from './ui/Mascot'
 import { Empty, IconButton } from './ui/primitives'
@@ -174,11 +175,15 @@ function Shell() {
   // 헤더 오른쪽 끝, 닫기 버튼 앞에 둔다. 모든 화면에서 같은 자리다.
   const headerActions = (
     <>
-      <IconButton
-        icon="chat"
-        label="채널톡 문의"
+      <button
+        type="button"
+        className="tg-iconbtn"
+        aria-label="채널톡 문의"
+        title="채널톡 문의"
         onClick={openChannelTalk}
-      />
+      >
+        <ChannelTalkLogo size={22} />
+      </button>
       <IconButton
         icon="close"
         label="닫기"
