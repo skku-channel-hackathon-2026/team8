@@ -252,7 +252,7 @@ const draft = {
   title: "택배 찾아주기",
   detail: "",
   place: "학관",
-  deadline: 9_999_999_999_999,
+  deadline: 23 * 60 + 50,
   duration: 30,
   reward: 30,
   category: "errand",
@@ -633,7 +633,7 @@ const roomDraft = {
   title: "점심 같이 먹어요",
   theme: "play",
   place: "학관",
-  until: 9_999_999_999_999,
+  until: 23 * 60 + 50,
   max: 2,
   note: "",
 };
