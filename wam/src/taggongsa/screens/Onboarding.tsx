@@ -12,7 +12,8 @@ import type { Campus, Role } from '../types'
 import { scopeOf } from '../lib/identity'
 import { loadAccounts } from '../lib/storage'
 import { Icon } from '../ui/Icon'
-import { Leaf, Mascot } from '../ui/Mascot'
+import { Mascot } from '../ui/Mascot'
+import logoUrl from '../assets/logo.png'
 import { Avatar, Button, Card, RoleChip } from '../ui/primitives'
 
 export function Welcome({
@@ -24,24 +25,22 @@ export function Welcome({
 }) {
   return (
     <div className="tg-welcome">
-      <div
-        className="tg-welcome__logo"
-        role="img"
-        aria-label="타공사"
-      >
-        <Leaf size={84} />
-        <span>타공사</span>
+      <div className="tg-welcome__logo">
+        <img
+          src={logoUrl}
+          alt="타공사 · 타인의 공강을 사다"
+        />
       </div>
       <div className="tg-welcome__actions">
         <Button
           block
+          variant="soft"
           onClick={onLogin}
         >
           로그인
         </Button>
         <Button
           block
-          variant="outline"
           onClick={onSignup}
         >
           회원가입

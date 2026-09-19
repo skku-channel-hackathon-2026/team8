@@ -13,7 +13,7 @@ import type { Toast } from './types'
 import { useChannelIdentity } from './lib/identity'
 import { DAY_LABELS, fmt } from './lib/time'
 import { Icon } from './ui/Icon'
-import { Leaf } from './ui/Mascot'
+import { Leaf, Mascot } from './ui/Mascot'
 import { Empty, IconButton } from './ui/primitives'
 import { MarketScreen } from './screens/Market'
 import { MeetScreen, RoomScreen } from './screens/Meet'
@@ -74,7 +74,10 @@ function Toasts() {
 function Logo() {
   return (
     <span className="tg-logo">
-      <Leaf size={24} />
+      <Mascot
+        size={30}
+        color="gold"
+      />
       타공사
     </span>
   )
