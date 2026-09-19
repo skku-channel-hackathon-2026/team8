@@ -115,6 +115,23 @@ export interface LedgerEntry {
   at: number
 }
 
+/**
+ * chatId 형식: `dm:<상대ID>` · `room:<모임ID>` · `task:<부탁ID>`.
+ * 실제 서버 채팅 대신, 상대의 응답을 tick()에서 흉내 낸다.
+ */
+export interface ChatMessage {
+  id: string
+  chatId: string
+  senderId: string
+  text: string
+  at: number
+}
+
+export interface ChatPending {
+  chatId: string
+  at: number
+}
+
 export type ToastTone = 'default' | 'leaf'
 
 export interface Toast {

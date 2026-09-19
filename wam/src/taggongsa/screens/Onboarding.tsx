@@ -84,14 +84,14 @@ export function Login({
   const scope = scopeOf(identity)
   const accounts = useMemo(() => loadAccounts<AppState>(scope), [scope])
   const saved = Object.values(accounts).filter(
-    (account) => account.version === 3 && account.profile
+    (account) => account.version === 4 && account.profile
   )
   const [nickname, setNickname] = useState('')
   const [error, setError] = useState('')
 
   const login = (name: string) => {
     const account = accounts[name.trim()]
-    if (!account || account.version !== 3 || !account.profile) {
+    if (!account || account.version !== 4 || !account.profile) {
       setError(`'${name.trim()}' 별명으로 가입한 계정이 이 기기에 없어요.`)
       return
     }
@@ -202,12 +202,12 @@ const ROLE_OPTIONS: Array<{ role: Role; title: string; body: string }> = [
   {
     role: 'fresh',
     title: '올해 입학한 새내기예요',
-    body: '튜토리얼 미션으로 학교에 적응하고 은행잎을 모아요',
+    body: '튜토리얼로 학교에 적응하고 은행잎을 모아요',
   },
   {
     role: 'senior',
     title: '학교가 익숙한 헌내기예요',
-    body: '새내기를 위한 미션을 만들고 인증을 도와줘요',
+    body: '새내기를 위한 튜토리얼을 만들고 인증을 도와줘요',
   },
 ]
 

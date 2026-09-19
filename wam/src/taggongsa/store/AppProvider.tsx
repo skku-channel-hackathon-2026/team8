@@ -8,7 +8,7 @@ import { createInitialState, reducer, type AppState } from './state'
 function loadInitial(identity: ChannelIdentity): AppState {
   const initial = createInitialState(identity)
   const saved = loadSaved<AppState>(scopeOf(identity))
-  if (!saved || saved.version !== 3) return initial
+  if (!saved || saved.version !== 4) return initial
   // 저장된 신원은 믿지 않고 지금 호스트가 준 신원으로 덮어쓴다.
   return { ...initial, ...saved, identity, toasts: [] }
 }

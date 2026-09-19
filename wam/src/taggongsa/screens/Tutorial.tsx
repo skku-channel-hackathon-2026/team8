@@ -261,7 +261,7 @@ function AppsStep() {
   )
 }
 
-/* ---------------- 미션 카드와 시트 ---------------- */
+/* ---------------- 튜토리얼 카드와 시트 ---------------- */
 
 function MissionStats({ mission }: { mission: Mission }) {
   return (
@@ -352,7 +352,7 @@ function MissionSheet({
 
   return (
     <Sheet
-      title="미션 인증"
+      title="튜토리얼 인증"
       onClose={onClose}
       footer={
         submission ? undefined : (
@@ -394,7 +394,7 @@ function MissionSheet({
         </div>
         {author && (
           <p className="tg-caption">
-            {author.nickname} 선배({author.department})가 만든 미션이에요
+            {author.nickname} 선배({author.department})가 만든 튜토리얼이에요
           </p>
         )}
 
@@ -516,7 +516,7 @@ function FreshMissionBoard({ unlocked }: { unlocked: boolean }) {
           <div className="tg-grow">
             <p className="tg-strong">추가 튜토리얼은 3단계 뒤에 열려요</p>
             <p className="tg-caption">
-              헌내기 선배들이 만든 미션 {state.missions.length}개가 기다리고
+              헌내기 선배들이 만든 튜토리얼 {state.missions.length}개가 기다리고
               있어요
             </p>
           </div>
@@ -529,7 +529,7 @@ function FreshMissionBoard({ unlocked }: { unlocked: boolean }) {
     <div className="tg-stack">
       <SectionHead
         title="추가 튜토리얼"
-        caption={`원하는 미션을 골라 도전해요 · 완료 ${doneCount}개`}
+        caption={`원하는 튜토리얼을 골라 도전해요 · 완료 ${doneCount}개`}
       />
       <div className="tg-chips">
         <ChipButton
@@ -579,9 +579,8 @@ function FreshMissionBoard({ unlocked }: { unlocked: boolean }) {
   )
 }
 
-/* ---------------- 헌내기 미션 스튜디오 ---------------- */
+/* ---------------- 헌내기 튜토리얼 스튜디오 ---------------- */
 
-const REWARD_OPTIONS = [5, 10, 15, 20]
 const CATEGORIES = Object.keys(MISSION_CATEGORY_LABEL) as MissionCategory[]
 
 function MissionFormSheet({ onClose }: { onClose: () => void }) {
@@ -589,7 +588,6 @@ function MissionFormSheet({ onClose }: { onClose: () => void }) {
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [proof, setProof] = useState('')
-  const [reward, setReward] = useState(10)
   const [category, setCategory] = useState<MissionCategory>('campus')
   const valid =
     title.trim().length >= 4 &&
@@ -598,7 +596,7 @@ function MissionFormSheet({ onClose }: { onClose: () => void }) {
 
   return (
     <Sheet
-      title="새 미션 만들기"
+      title="새 튜토리얼 만들기"
       onClose={onClose}
       footer={
         <Button
@@ -612,14 +610,13 @@ function MissionFormSheet({ onClose }: { onClose: () => void }) {
                 title: title.trim(),
                 description: description.trim(),
                 proof: proof.trim(),
-                reward,
                 category,
               },
             })
             onClose()
           }}
         >
-          미션 올리고 {REWARDS.missionCreate}잎 받기
+          튜토리얼 올리고 {REWARDS.missionCreate}잎 받기
         </Button>
       }
     >
@@ -634,7 +631,7 @@ function MissionFormSheet({ onClose }: { onClose: () => void }) {
             새내기가 한 번에 해볼 수 있는 일이면 좋아요.
           </span>
         </div>
-        <Field label="미션 이름">
+        <Field label="튜토리얼 이름">
           {(id) => (
             <input
               id={id}
@@ -668,7 +665,7 @@ function MissionFormSheet({ onClose }: { onClose: () => void }) {
             <textarea
               id={id}
               className="tg-textarea"
-              placeholder="새내기에게 이 미션이 왜 도움이 되는지 적어주세요"
+              placeholder="새내기에게 이 튜토리얼이 왜 도움이 되는지 적어주세요"
               value={description}
               onChange={(event) => setDescription(event.target.value)}
             />
@@ -687,16 +684,12 @@ function MissionFormSheet({ onClose }: { onClose: () => void }) {
         </Field>
         <div className="tg-field">
           <span className="tg-label">새내기 보상</span>
-          <div className="tg-chips">
-            {REWARD_OPTIONS.map((value) => (
-              <ChipButton
-                key={value}
-                pressed={reward === value}
-                onClick={() => setReward(value)}
-              >
-                {value}잎
-              </ChipButton>
-            ))}
+          <div className="tg-row tg-row--between">
+            <LeafAmount
+              value={REWARDS.tutorialReward}
+              size="sm"
+            />
+            <span className="tg-caption">모든 튜토리얼이 동일해요</span>
           </div>
           <p className="tg-hint">보상은 새내기가 인증을 받으면 지급돼요</p>
         </div>
@@ -807,11 +800,11 @@ function SeniorStudio() {
           />
           <div className="tg-grow">
             <p className="tg-strong">
-              미션을 만들면 {REWARDS.missionCreate}잎!
+              튜토리얼을 만들면 {REWARDS.missionCreate}잎!
             </p>
             <p className="tg-caption">
-              새내기가 3단계 이후에 도전할 미션을 만들어 주세요 · 내가 만든 미션{' '}
-              {mine}개
+              새내기가 3단계 이후에 도전할 튜토리얼을 만들어 주세요 · 내가 만든
+              튜토리얼 {mine}개
             </p>
           </div>
         </div>
@@ -822,16 +815,16 @@ function SeniorStudio() {
           onClick={() => setFormOpen(true)}
           style={{ marginTop: 14 }}
         >
-          새 미션 만들기
+          새 튜토리얼 만들기
         </Button>
       </Card>
 
       <Segmented
-        label="미션 스튜디오"
+        label="튜토리얼 스튜디오"
         value={tab}
         onChange={setTab}
         options={[
-          { value: 'missions', label: '미션 목록' },
+          { value: 'missions', label: '튜토리얼 목록' },
           { value: 'reviews', label: '인증 요청', badge: pending.length },
         ]}
       />
@@ -875,7 +868,7 @@ function SeniorStudio() {
                   <div className="tg-row tg-row--between">
                     <span className="tg-caption">
                       {own
-                        ? '내가 만든 미션'
+                        ? '내가 만든 튜토리얼'
                         : `by ${author?.nickname ?? '선배'}`}{' '}
                       · {timeAgo(mission.createdAt)}
                     </span>
@@ -884,7 +877,7 @@ function SeniorStudio() {
                       className="tg-reco"
                       aria-pressed={on}
                       disabled={own}
-                      title={own ? '내 미션은 추천할 수 없어요' : undefined}
+                      title={own ? '내 튜토리얼은 추천할 수 없어요' : undefined}
                       onClick={() =>
                         dispatch({
                           type: 'TOGGLE_RECOMMEND',
@@ -1021,7 +1014,7 @@ export function TutorialScreen() {
         <p className="tg-body">
           {isFresh
             ? '0단계로 시간표를 올리고 1~3단계 기본 튜토리얼을 마치면, 선배들이 만든 추가 튜토리얼이 열려요.'
-            : '헌내기는 시간표만 올리면 돼요. 그다음엔 미션을 만들고 새내기의 인증을 확인해 주세요.'}
+            : '헌내기는 시간표만 올리면 돼요. 그다음엔 튜토리얼을 만들고 새내기의 인증을 확인해 주세요.'}
         </p>
         {isFresh && (
           <div

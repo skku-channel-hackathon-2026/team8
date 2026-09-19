@@ -1,5 +1,7 @@
 import type {
   Campus,
+  ChatMessage,
+  ChatPending,
   ClassBlock,
   ClockSetting,
   LedgerEntry,
@@ -20,7 +22,7 @@ import type {
   ToastTone,
 } from '../types'
 import { ME, buildSeed } from '../data/seed'
-import { REWARDS, STEP_INFO, THEME_LABEL } from '../data/labels'
+import { CHAT_REPLIES, REWARDS, STEP_INFO, THEME_LABEL } from '../data/labels'
 import { hashPick, hashString, uid } from '../lib/id'
 import type { ChannelIdentity } from '../lib/identity'
 import { isVisiblyFree, momentFromDate } from '../lib/time'
@@ -34,7 +36,7 @@ export interface TutorialState {
 }
 
 export interface AppState {
-  version: 3
+  version: 4
   /** 채널톡이 준 현재 사용자. 저장된 값이 아니라 항상 호스트에서 다시 받는다. */
   identity: ChannelIdentity
   profile: Profile | null
@@ -48,13 +50,15 @@ export interface AppState {
   ledger: LedgerEntry[]
   clock: ClockSetting
   toasts: Toast[]
+  chatMessages: ChatMessage[]
+  /** 채팅방별로 상대의 응답을 흉내 내기까지 남은 대기 상태 */
+  chatPending: ChatPending[]
 }
 
 export interface MissionDraft {
   title: string
   description: string
   proof: string
-  reward: number
   category: MissionCategory
 }
 
@@ -110,6 +114,7 @@ export type Action =
   | { type: 'REPORT_TASK'; taskId: string }
   | { type: 'CONFIRM_TASK'; taskId: string }
   | { type: 'SET_CLOCK'; clock: ClockSetting }
+  | { type: 'SEND_CHAT_MESSAGE'; chatId: string; text: string }
   | { type: 'TICK'; now: number }
   | { type: 'TOAST'; text: string; tone?: ToastTone }
   | { type: 'DISMISS_TOAST'; id: string }
@@ -125,7 +130,7 @@ export const DEFAULT_CLOCK: ClockSetting = {
 
 export function createInitialState(identity: ChannelIdentity): AppState {
   return {
-    version: 3,
+    version: 4,
     identity,
     profile: null,
     tutorial: {
@@ -137,6 +142,8 @@ export function createInitialState(identity: ChannelIdentity): AppState {
     ledger: [],
     clock: DEFAULT_CLOCK,
     toasts: [],
+    chatMessages: [],
+    chatPending: [],
   }
 }
 
@@ -157,6 +164,37 @@ export function findPerson(
 function nick(state: AppState, id: string | undefined): string {
   if (!id) return '누군가'
   return findPerson(state, id)?.nickname ?? '누군가'
+}
+
+/**
+ * chatId(`dm:`·`room:`·`task:` 접두사)로부터 지금 이 기기의 나와 대화하는
+ * 상대의 id를 찾는다. 모임 채팅은 나를 뺀 멤버 중 한 명을 정해서 고른다.
+ */
+export function counterpartIdFor(
+  state: AppState,
+  chatId: string
+): string | undefined {
+  const [kind, rest] = chatId.split(':')
+  if (kind === 'dm') return rest
+  if (kind === 'room') {
+    const room = state.rooms.find((r) => r.id === rest)
+    const others = room?.memberIds.filter((id) => id !== ME) ?? []
+    return others.length > 0 ? hashPick(others, chatId) : undefined
+  }
+  if (kind === 'task') {
+    const task = state.tasks.find((t) => t.id === rest)
+    if (!task) return undefined
+    return task.requesterId === ME ? task.workerId : task.requesterId
+  }
+  return undefined
+}
+
+export function resolveChatPeer(
+  state: AppState,
+  chatId: string
+): Student | Profile | undefined {
+  const id = counterpartIdFor(state, chatId)
+  return id ? findPerson(state, id) : undefined
 }
 
 function toast(
@@ -242,12 +280,37 @@ function tick(state: AppState, now: number): AppState {
       ),
     }
     if (mission) {
-      next = grant(next, mission.reward, `미션 인증 · ${mission.title}`)
+      next = grant(next, mission.reward, `튜토리얼 인증 · ${mission.title}`)
       next = toast(
         next,
         `${reviewer.nickname}님이 인증을 인정했어요 · +${mission.reward}잎`,
         'leaf'
       )
+    }
+  }
+
+  for (const pending of state.chatPending) {
+    if (pending.at > now) continue
+    const peerId = counterpartIdFor(state, pending.chatId)
+    if (peerId) {
+      const reply = hashPick(CHAT_REPLIES, `${pending.chatId}:${now}`)
+      next = {
+        ...next,
+        chatMessages: [
+          ...next.chatMessages,
+          {
+            id: uid('msg'),
+            chatId: pending.chatId,
+            senderId: peerId,
+            text: reply,
+            at: now,
+          },
+        ],
+      }
+    }
+    next = {
+      ...next,
+      chatPending: next.chatPending.filter((p) => p !== pending),
     }
   }
 
@@ -422,6 +485,7 @@ export function reducer(state: AppState, action: Action): AppState {
       const mission: Mission = {
         id: uid('m'),
         ...action.draft,
+        reward: REWARDS.tutorialReward,
         authorId: ME,
         createdAt: Date.now(),
         recommenders: [],
@@ -430,11 +494,11 @@ export function reducer(state: AppState, action: Action): AppState {
       const next = grant(
         { ...state, missions: [mission, ...state.missions] },
         REWARDS.missionCreate,
-        `미션 제작 · ${mission.title}`
+        `튜토리얼 제작 · ${mission.title}`
       )
       return toast(
         next,
-        `미션을 올렸어요! 은행잎 ${REWARDS.missionCreate}잎을 받았어요`,
+        `튜토리얼을 올렸어요! 은행잎 ${REWARDS.missionCreate}잎을 받았어요`,
         'leaf'
       )
     }
@@ -714,6 +778,32 @@ export function reducer(state: AppState, action: Action): AppState {
 
     case 'SET_CLOCK':
       return { ...state, clock: action.clock }
+
+    case 'SEND_CHAT_MESSAGE': {
+      const text = action.text.trim()
+      if (!text) return state
+      const message: ChatMessage = {
+        id: uid('msg'),
+        chatId: action.chatId,
+        senderId: ME,
+        text,
+        at: Date.now(),
+      }
+      const already = state.chatPending.some((p) => p.chatId === action.chatId)
+      return {
+        ...state,
+        chatMessages: [...state.chatMessages, message],
+        chatPending: already
+          ? state.chatPending
+          : [
+              ...state.chatPending,
+              {
+                chatId: action.chatId,
+                at: Date.now() + 1200 + (hashString(message.id) % 1400),
+              },
+            ],
+      }
+    }
 
     case 'TICK':
       return tick(state, action.now)

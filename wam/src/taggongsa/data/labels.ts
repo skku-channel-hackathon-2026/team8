@@ -54,7 +54,19 @@ export const REWARDS = {
   signup: 10,
   steps: [5, 10, 10, 10],
   missionCreate: 15,
+  /** 3단계 이후 튜토리얼을 완료했을 때 새내기가 받는 보수. 모든 튜토리얼에 동일하게 적용된다. */
+  tutorialReward: 10,
 } as const
+
+export const CHAT_REPLIES = [
+  '네 좋아요!',
+  '지금 갈게요',
+  '어디로 가면 될까요?',
+  '넵 알겠습니다',
+  '조금만 기다려주세요',
+  '고마워요 :)',
+  '좋아요, 이따 봐요',
+]
 
 export const STEP_INFO = [
   {

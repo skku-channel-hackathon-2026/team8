@@ -351,6 +351,7 @@ function CreateRoomSheet({ onClose }: { onClose: () => void }) {
 
 function IncomingRequest({ request }: { request: MeetRequest }) {
   const { state, dispatch } = useApp()
+  const { push } = useNav()
   const from = findPerson(state, request.fromId)
   const room = request.roomId
     ? state.rooms.find((r) => r.id === request.roomId)
@@ -404,9 +405,17 @@ function IncomingRequest({ request }: { request: MeetRequest }) {
           size="sm"
           variant="dark"
           className="tg-grow"
-          onClick={() =>
+          onClick={() => {
             dispatch({ type: 'RESPOND_REQUEST', id: request.id, accept: true })
-          }
+            push({
+              name: 'chat',
+              chatId:
+                request.kind === 'room' && request.roomId
+                  ? `room:${request.roomId}`
+                  : `dm:${request.fromId}`,
+              title: from?.nickname,
+            })
+          }}
         >
           수락하기
         </Button>
@@ -647,12 +656,20 @@ export function MeetScreen() {
                       />
                     </div>
                     {sent?.status === 'accepted' ? (
-                      <Chip
-                        tone="green"
-                        icon="check"
+                      <Button
+                        size="sm"
+                        variant="dark"
+                        icon="send"
+                        onClick={() =>
+                          push({
+                            name: 'chat',
+                            chatId: `dm:${student.id}`,
+                            title: student.nickname,
+                          })
+                        }
                       >
-                        수락함
-                      </Chip>
+                        채팅하기
+                      </Button>
                     ) : sent?.status === 'pending' ? (
                       <Button
                         size="sm"
@@ -690,7 +707,7 @@ export function MeetScreen() {
 
 export function RoomScreen({ roomId }: { roomId: string }) {
   const { state, now, dispatch } = useApp()
-  const { back } = useNav()
+  const { back, push } = useNav()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const room = state.rooms.find((r) => r.id === roomId)
 
@@ -781,6 +798,23 @@ export function RoomScreen({ roomId }: { roomId: string }) {
           onClick={() => dispatch({ type: 'JOIN_ROOM', roomId: room.id })}
         >
           {full ? '정원이 다 찼어요' : '이 모임에 참여하기'}
+        </Button>
+      )}
+
+      {isMember && (
+        <Button
+          variant="dark"
+          block
+          icon="send"
+          onClick={() =>
+            push({
+              name: 'chat',
+              chatId: `room:${room.id}`,
+              title: room.title,
+            })
+          }
+        >
+          채팅방 열기
         </Button>
       )}
 
