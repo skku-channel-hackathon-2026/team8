@@ -54,7 +54,10 @@
   position: relative;
   display: flex;
   flex-direction: column;
+  /* 키보드가 올라오면 보이는 영역 높이로 줄어든다. 값은 lib/viewport.ts가 넣는다. */
   height: 100vh;
+  height: var(--tg-viewport-height, 100vh);
+  transform: translateY(var(--tg-viewport-top, 0px));
   overflow: hidden;
   isolation: isolate;
   background:
@@ -2365,4 +2368,9 @@ button.tg-noti:hover {
   border-radius: 50%;
   background: var(--tg-ginkgo-soft);
   color: var(--tg-heading);
+}
+
+/* 알림 목록은 한 줄씩 또렷하게 나눈다 */
+.tg-list--noti > * + * {
+  border-top: 1px solid var(--tg-line-strong);
 }

@@ -124,7 +124,7 @@ export type Action =
   | { type: 'SYNC'; snapshot: LocalSnapshot }
   | { type: 'TOAST'; text: string; tone?: ToastTone }
   | { type: 'DISMISS_TOAST'; id: string }
-  | { type: 'MARK_NOTIFICATIONS_READ' }
+  | { type: 'MARK_NOTIFICATION_READ'; id: string }
   | { type: 'SKIP_INTRO' }
 
 export const AVATAR_TONES = 5
@@ -504,7 +504,7 @@ function noticesFor(before: AppState, after: AppState): AppState {
         submission.status === 'approved'
           ? toast(
               next,
-              `인증이 인정됐어요 · +${mission?.reward ?? 0}잎`,
+              `'${mission?.title ?? '튜토리얼'}' 인증되었어요 · +${mission?.reward ?? 0}잎`,
               'leaf',
               TUTORIAL
             )
@@ -1085,12 +1085,11 @@ export function reducer(state: AppState, action: Action): AppState {
     case 'TOAST':
       return toast(state, action.text, action.tone)
 
-    case 'MARK_NOTIFICATIONS_READ':
-      if (!(state.notifications ?? []).some((n) => !n.read)) return state
+    case 'MARK_NOTIFICATION_READ':
       return {
         ...state,
-        notifications: state.notifications.map((n) =>
-          n.read ? n : { ...n, read: true }
+        notifications: (state.notifications ?? []).map((n) =>
+          n.id === action.id && !n.read ? { ...n, read: true } : n
         ),
       }
 

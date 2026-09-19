@@ -332,9 +332,6 @@ function MissionSheet({
   const { state, dispatch } = useApp()
   const submission = mySubmission(state, mission.id)
   const author = findPerson(state, mission.authorId)
-  const reviewer = submission?.reviewerId
-    ? findPerson(state, submission.reviewerId)
-    : undefined
   const [note, setNote] = useState('')
   const [photo, setPhoto] = useState<string | undefined>()
   const [photoError, setPhotoError] = useState('')
@@ -408,9 +405,7 @@ function MissionSheet({
               />
               <div className="tg-grow">
                 <p className="tg-strong">인증 완료! +{mission.reward}잎</p>
-                <p className="tg-caption">
-                  {reviewer?.nickname ?? '선배'}님이 인증을 인정했어요
-                </p>
+                <p className="tg-caption">인증되었어요</p>
               </div>
             </div>
           </Card>
@@ -497,10 +492,19 @@ function FreshMissionBoard({ unlocked }: { unlocked: boolean }) {
   const { state } = useApp()
   const [sort, setSort] = useState<SortKey>('reco')
   const [open, setOpen] = useState<Mission | null>(null)
-  const missions = useMemo(
-    () => sortMissions(state.missions, sort),
-    [state.missions, sort]
-  )
+  // 완료한 튜토리얼은 맨 아래로 보낸다. 고른 정렬은 각 묶음 안에서 그대로 적용된다.
+  const missions = useMemo(() => {
+    const done = new Set(
+      state.submissions
+        .filter((s) => s.userId === ME && s.status === 'approved')
+        .map((s) => s.missionId)
+    )
+    const sorted = sortMissions(state.missions, sort)
+    return [
+      ...sorted.filter((m) => !done.has(m.id)),
+      ...sorted.filter((m) => done.has(m.id)),
+    ]
+  }, [state.missions, state.submissions, sort])
   const doneCount = state.submissions.filter(
     (s) => s.userId === ME && s.status === 'approved'
   ).length
