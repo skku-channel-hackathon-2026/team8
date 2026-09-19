@@ -18,10 +18,13 @@ export function useProfileSync() {
 
   const warn = useCallback(
     (error: unknown, what: string) => {
-      const code = error instanceof ApiError ? error.code : 'failed'
+      const failure = error instanceof ApiError ? error : new ApiError('failed')
       dispatch({
         type: 'TOAST',
-        text: `${what}을 서버에 저장하지 못했어요. ${apiErrorMessage(code)}`,
+        text: `${what}을 서버에 저장하지 못했어요. ${apiErrorMessage(
+          failure.code,
+          failure.status
+        )}`,
       })
     },
     [dispatch]

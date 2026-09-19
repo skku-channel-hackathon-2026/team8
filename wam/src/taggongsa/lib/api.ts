@@ -17,7 +17,11 @@ import {
 const TIMEOUT_MS = 15_000
 
 export class ApiError extends Error {
-  constructor(readonly code: string) {
+  constructor(
+    readonly code: string,
+    /** 서버가 돌려준 상태. 모르는 오류일 때 화면에 같이 띄워 단서를 남긴다. */
+    readonly status = 0
+  ) {
     super(code)
   }
 }
@@ -42,12 +46,23 @@ const MESSAGES: Record<string, string> = {
   submission_changed: '이미 심사가 끝난 인증이에요.',
   mission_not_found: '이미 사라진 튜토리얼이에요.',
   step_locked: '앞 단계를 먼저 끝내 주세요.',
+  submission_not_found: '이미 사라진 인증이에요.',
+  method_not_allowed: '앱과 서버 버전이 안 맞아요. 창을 닫고 다시 열어 주세요.',
+  bad_response: '서버가 보낸 값을 읽지 못했어요. 창을 닫고 다시 열어 주세요.',
 }
 
-export function apiErrorMessage(code: string): string {
-  return (
-    MESSAGES[code] ?? '요청을 처리하지 못했어요. 잠시 후 다시 시도해 주세요.'
-  )
+/**
+ * 모르는 오류는 "처리하지 못했어요"로 뭉뚱그리지 않는다.
+ *
+ * 그렇게 적어 두면 무엇이 잘못됐는지 화면만 봐서는 알 수 없고, 고치려면
+ * 개발자 도구를 열어야 한다. 모르는 것은 모르는 대로 코드와 상태를 적어
+ * 둬야 스크린샷 한 장으로 원인을 좁힐 수 있다.
+ */
+export function apiErrorMessage(code: string, status = 0): string {
+  const known = MESSAGES[code]
+  if (known) return known
+  const detail = status ? `${code} ${status}` : code
+  return `요청을 처리하지 못했어요 (${detail})`
 }
 
 async function call<T>(
@@ -79,7 +94,8 @@ async function call<T>(
     (T & { error?: string }) | null
 
   if (!response.ok || !body) {
-    throw new ApiError(body?.error ?? 'failed')
+    // JSON이 아니면 서버가 아니라 그 앞단(프록시·CDN)이 답했을 수 있다.
+    throw new ApiError(body?.error ?? 'failed', response.status)
   }
   return body
 }

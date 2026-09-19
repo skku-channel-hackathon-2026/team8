@@ -40,6 +40,8 @@ export function useServerBridge(
   // 지난번과 똑같은 스냅샷이면 화면을 건드리지 않는다. 몇 초마다 같은 값으로
   // 상태를 갈아 끼우면 아무것도 바뀌지 않았는데 화면 전체가 다시 그려진다.
   const seen = useRef('')
+  /** 같은 말을 3초마다 반복하지 않도록, 연결 문제는 한 번만 알린다. */
+  const warned = useRef(false)
 
   const refresh = useCallback(
     async (force = false): Promise<void> => {
@@ -54,8 +56,22 @@ export function useServerBridge(
           type: 'SYNC',
           snapshot: toLocalSnapshot(snapshot, myServerId(latest.current)),
         })
-      } catch {
+      } catch (error) {
         // 서버에 못 닿아도 화면은 계속 쓴다. 다음 차례에 다시 시도한다.
+        //
+        // 다만 끝까지 말없이 실패하면, 화면은 멀쩡해 보이는데 아무것도
+        // 오가지 않는 상태가 된다. 잠깐 끊긴 것과 구분해 한 번만 알린다.
+        const failure =
+          error instanceof ApiError ? error : new ApiError('failed')
+        if (failure.code === 'network' || failure.code === 'timeout') return
+        if (warned.current) return
+        warned.current = true
+        dispatch({
+          type: 'TOAST',
+          text: `서버와 연결되지 않았어요 (${failure.code}${
+            failure.status ? ` ${failure.status}` : ''
+          })`,
+        })
       }
     },
     [dispatch, token]
@@ -66,8 +82,12 @@ export function useServerBridge(
     (work: Promise<unknown>): void => {
       void work
         .catch((error: unknown) => {
-          const code = error instanceof ApiError ? error.code : 'failed'
-          dispatch({ type: 'TOAST', text: apiErrorMessage(code) })
+          const failure =
+            error instanceof ApiError ? error : new ApiError('failed')
+          dispatch({
+            type: 'TOAST',
+            text: apiErrorMessage(failure.code, failure.status),
+          })
         })
         .then(() => refresh(true))
     },
