@@ -1,29 +1,8 @@
-import {
-  HeightSynchronizer,
-  WamHeader,
-  WamThemeProvider,
-} from '@channel.io/app-sdk-wam-ui'
-import { useWamClose } from '@channel.io/app-sdk-wam'
+import TaggongsaApp from './taggongsa/TaggongsaApp'
 
-import { isMobile } from './utils/userAgent'
-import Send from './pages/Send'
-
+// 기존 채널톡 튜토리얼 화면(pages/Send)은 참고용으로 남겨두고, 타공사 앱을 연다.
 function App() {
-  const { close } = useWamClose()
-
-  return (
-    <WamThemeProvider>
-      <HeightSynchronizer maxHeight={480}>
-        <WamHeader
-          title="Tutorial"
-          onClose={close}
-        />
-        <div style={{ padding: isMobile() ? '0 16px 16px' : '0 24px 24px' }}>
-          <Send />
-        </div>
-      </HeightSynchronizer>
-    </WamThemeProvider>
-  )
+  return <TaggongsaApp />
 }
 
 export default App
