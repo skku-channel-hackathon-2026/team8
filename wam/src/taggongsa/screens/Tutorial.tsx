@@ -929,7 +929,11 @@ function SeniorStudio() {
 
 /* ---------------- 화면 ---------------- */
 
-export function TutorialScreen() {
+/**
+ * intro가 켜지면 로그인 직후 메뉴보다 먼저 보여 주는 기본 튜토리얼 화면이 된다.
+ * 이때는 0~3단계만 보여 주고 추가 튜토리얼 목록은 감춘다.
+ */
+export function TutorialScreen({ intro = false }: { intro?: boolean }) {
   const { state, dispatch } = useApp()
   const me = useMe()
   const done = state.tutorial.done
@@ -1004,17 +1008,25 @@ export function TutorialScreen() {
     <div className="tg-stack tg-stack--lg">
       <div className="tg-stack tg-stack--sm">
         <p className="tg-caption tg-strong">
-          {isFresh ? '새내기 튜토리얼' : '헌내기 튜토리얼'}
+          {intro
+            ? `${me.nickname}님, 반가워요`
+            : isFresh
+              ? '새내기 튜토리얼'
+              : '헌내기 튜토리얼'}
         </p>
         <h1 className="tg-h1">
-          {isFresh
-            ? '한 단계씩, 학교와 친해지기'
-            : '새내기의 길잡이가 되어 주세요'}
+          {intro
+            ? '기본 튜토리얼부터 시작해요'
+            : isFresh
+              ? '한 단계씩, 학교와 친해지기'
+              : '새내기의 길잡이가 되어 주세요'}
         </h1>
         <p className="tg-body">
-          {isFresh
-            ? '0단계로 시간표를 올리고 1~3단계 기본 튜토리얼을 마치면, 선배들이 만든 추가 튜토리얼이 열려요.'
-            : '헌내기는 시간표만 올리면 돼요. 그다음엔 튜토리얼을 만들고 새내기의 인증을 확인해 주세요.'}
+          {intro
+            ? '0~3단계를 마치면 은행잎을 받고 메뉴로 넘어가요. 나중에 하고 싶다면 오른쪽 아래 건너뛰기를 누르세요. 튜토리얼 메뉴에서 언제든 다시 할 수 있어요.'
+            : isFresh
+              ? '0단계로 시간표를 올리고 1~3단계 기본 튜토리얼을 마치면, 선배들이 만든 추가 튜토리얼이 열려요.'
+              : '헌내기는 시간표만 올리면 돼요. 그다음엔 튜토리얼을 만들고 새내기의 인증을 확인해 주세요.'}
         </p>
         {isFresh && (
           <div
@@ -1046,7 +1058,7 @@ export function TutorialScreen() {
         ))}
       </div>
 
-      {isFresh ? (
+      {intro ? null : isFresh ? (
         <FreshMissionBoard unlocked={boardUnlocked} />
       ) : (
         <SeniorStudio />

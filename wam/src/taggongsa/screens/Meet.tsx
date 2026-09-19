@@ -1,8 +1,14 @@
 import { useMemo, useState } from 'react'
 import { useApp, useMe, useNav } from '../store/context'
-import { ME, findPerson } from '../store/state'
+import {
+  ME,
+  connectedPartnerIds,
+  findPerson,
+  joinedChats,
+} from '../store/state'
 import { CAMPUS_SHORT, THEME_HINT, THEME_LABEL } from '../data/labels'
 import type {
+  Campus,
   ClassBlock,
   MeetRequest,
   MeetTheme,
@@ -258,7 +264,7 @@ function CreateRoomSheet({ onClose }: { onClose: () => void }) {
               },
             })
             onClose()
-            push({ name: 'room', roomId: id })
+            push({ name: 'chat', chatId: `room:${id}`, title: title.trim() })
           }}
         >
           모임방 열기
@@ -413,7 +419,7 @@ function IncomingRequest({ request }: { request: MeetRequest }) {
                 request.kind === 'room' && request.roomId
                   ? `room:${request.roomId}`
                   : `dm:${request.fromId}`,
-              title: from?.nickname,
+              title: room ? room.title : from?.nickname,
             })
           }}
         >
@@ -477,32 +483,51 @@ function RoomCard({ room, now }: { room: Room; now: Moment }) {
 
 type Filter = 'all' | 'fresh' | 'senior'
 
+const CAMPUS_FILTERS: Array<[Campus, string]> = [
+  ['humanities', '인사캠만 보기'],
+  ['natural', '자과캠만 보기'],
+]
+
 export function MeetScreen() {
   const { state, now, dispatch } = useApp()
   const me = useMe()
   const { push } = useNav()
   const [mode, setMode] = useState<'room' | 'dm'>('room')
   const [filter, setFilter] = useState<Filter>('all')
+  const [campus, setCampus] = useState<Campus | null>(null)
   const [dmTarget, setDmTarget] = useState<Student | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
 
   const myFree = getFreeState(me.timetable, now)
   const myCopy = describeFree(myFree, now)
-  const free = state.students.filter((s) => isVisiblyFree(s, now))
+  const chats = useMemo(() => joinedChats(state), [state])
+  const connected = useMemo(() => connectedPartnerIds(state), [state])
+  const inCampus = (value: Campus | undefined) =>
+    campus === null || value === campus
+  // 이미 1대1이 성사된 학생은 "참여한 채팅방"에서 보이므로 여기서는 뺀다.
+  const free = state.students.filter(
+    (s) => isVisiblyFree(s, now) && !connected.has(s.id) && inCampus(s.campus)
+  )
   const shown = free.filter((s) => filter === 'all' || s.role === filter)
   const incoming = state.requests.filter(
     (r) => r.toId === ME && r.status === 'pending'
   )
   const rooms = useMemo(
     () =>
-      [...state.rooms].sort((a, b) => {
-        const mineA = a.memberIds.includes(ME) ? 0 : 1
-        const mineB = b.memberIds.includes(ME) ? 0 : 1
-        const endA = a.until <= now.minutes ? 1 : 0
-        const endB = b.until <= now.minutes ? 1 : 0
-        return mineA - mineB || endA - endB || a.until - b.until
-      }),
-    [state.rooms, now.minutes]
+      state.rooms
+        // 참여 중인 모임은 "참여한 채팅방"에서 보이므로 여기서는 뺀다.
+        .filter(
+          (room) =>
+            !room.memberIds.includes(ME) &&
+            (campus === null ||
+              findPerson(state, room.hostId)?.campus === campus)
+        )
+        .sort((a, b) => {
+          const endA = a.until <= now.minutes ? 1 : 0
+          const endB = b.until <= now.minutes ? 1 : 0
+          return endA - endB || a.until - b.until
+        }),
+    [state, campus, now.minutes]
   )
 
   const sentTo = (id: string) =>
@@ -555,6 +580,31 @@ export function MeetScreen() {
         </div>
       </Card>
 
+      <button
+        type="button"
+        className="tg-chatentry"
+        onClick={() => push({ name: 'chats' })}
+      >
+        <span className="tg-chatentry__icon">
+          <Icon
+            name="send"
+            size={20}
+          />
+        </span>
+        <span className="tg-grow">
+          <span className="tg-strong">참여한 채팅방</span>
+          <span className="tg-caption">
+            {chats.length > 0
+              ? `수락한 1대1과 참여한 모임 ${chats.length}개`
+              : '신청이 수락되거나 모임에 참여하면 생겨요'}
+          </span>
+        </span>
+        <Icon
+          name="chevron"
+          size={18}
+        />
+      </button>
+
       {incoming.length > 0 && (
         <div className="tg-stack tg-stack--sm">
           <SectionHead
@@ -580,6 +630,22 @@ export function MeetScreen() {
         ]}
       />
 
+      <div
+        className="tg-chips"
+        role="group"
+        aria-label="캠퍼스 필터"
+      >
+        {CAMPUS_FILTERS.map(([value, label]) => (
+          <ChipButton
+            key={value}
+            pressed={campus === value}
+            onClick={() => setCampus(campus === value ? null : value)}
+          >
+            {label}
+          </ChipButton>
+        ))}
+      </div>
+
       {mode === 'room' && (
         <div className="tg-stack tg-stack--sm">
           <Button
@@ -592,7 +658,11 @@ export function MeetScreen() {
           </Button>
           {rooms.length === 0 ? (
             <Empty
-              title="아직 열린 모임이 없어요"
+              title={
+                campus
+                  ? '이 캠퍼스에 새로 참여할 모임이 없어요'
+                  : '새로 참여할 모임이 없어요'
+              }
               body="첫 모임방을 열고 공강인 친구를 초대해 보세요"
             />
           ) : (
@@ -655,22 +725,7 @@ export function MeetScreen() {
                         now={now}
                       />
                     </div>
-                    {sent?.status === 'accepted' ? (
-                      <Button
-                        size="sm"
-                        variant="dark"
-                        icon="send"
-                        onClick={() =>
-                          push({
-                            name: 'chat',
-                            chatId: `dm:${student.id}`,
-                            title: student.nickname,
-                          })
-                        }
-                      >
-                        채팅하기
-                      </Button>
-                    ) : sent?.status === 'pending' ? (
+                    {sent?.status === 'pending' ? (
                       <Button
                         size="sm"
                         variant="soft"
@@ -707,7 +762,7 @@ export function MeetScreen() {
 
 export function RoomScreen({ roomId }: { roomId: string }) {
   const { state, now, dispatch } = useApp()
-  const { back, push } = useNav()
+  const { back, push, stack } = useNav()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const room = state.rooms.find((r) => r.id === roomId)
 
@@ -930,7 +985,13 @@ export function RoomScreen({ roomId }: { roomId: string }) {
           icon="logout"
           onClick={() => {
             dispatch({ type: 'LEAVE_ROOM', roomId: room.id })
+            const previous = stack[stack.length - 2]
             back()
+            if (
+              previous?.name === 'chat' &&
+              previous.chatId === `room:${room.id}`
+            )
+              back()
           }}
         >
           모임 나가기
