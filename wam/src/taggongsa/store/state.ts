@@ -29,6 +29,7 @@ import type {
 import { ME, buildSeed } from '../data/seed'
 import { CHAT_REPLIES, REWARDS, STEP_INFO, THEME_LABEL } from '../data/labels'
 import { hashPick, hashString, uid } from '../lib/id'
+import type { Profile as ServerProfile } from '@tutorial/shared'
 import type { ChannelIdentity } from '../lib/identity'
 import { isVisiblyFree, momentFromDate } from '../lib/time'
 
@@ -100,6 +101,7 @@ export type Action =
       nickname: string
     }
   | { type: 'LOAD_ACCOUNT'; state: AppState }
+  | { type: 'HYDRATE_PROFILE'; profile: ServerProfile }
   | { type: 'LOG_OUT' }
   | { type: 'SET_TIMETABLE'; blocks: ClassBlock[] }
   | { type: 'SET_SHOW_FREE'; value: boolean }
@@ -665,6 +667,28 @@ export function reducer(state: AppState, action: Action): AppState {
         },
         `다시 만나서 반가워요, ${action.state.profile?.nickname ?? ''}님`
       )
+
+    case 'HYDRATE_PROFILE': {
+      const server = action.profile
+      return {
+        ...state,
+        profile: {
+          id: ME,
+          channelId: server.channelId,
+          managerId: server.managerId,
+          nickname: server.nickname,
+          department: server.department,
+          campus: server.campus,
+          role: server.role,
+          showFree: server.showFree,
+          tone: server.tone,
+          timetable: server.timetable,
+          // 은행잎은 아직 서버가 계산하지 않는다. 서버 값으로 덮으면 0이 되므로
+          // 원장이 서버로 옮겨갈 때까지 로컬 값을 유지한다.
+          leaves: state.profile?.leaves ?? 0,
+        },
+      }
+    }
 
     case 'LOG_OUT':
       return createInitialState(state.identity)

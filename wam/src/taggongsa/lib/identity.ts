@@ -12,6 +12,8 @@ export interface ChannelIdentity {
   managerId: string
   chatId: string
   chatType: string
+  /** 서버 API를 부를 때 붙이는 서명 토큰. 채널톡 밖에서는 비어 있다. */
+  sessionToken: string
   /** 'channel' = Desk에서 받은 실제 매니저, 'local' = 채널톡 밖 미리보기 */
   source: 'channel' | 'local'
 }
@@ -26,6 +28,7 @@ const LOCAL_IDENTITY: ChannelIdentity = {
   managerId: 'local-preview-manager',
   chatId: '',
   chatType: '',
+  sessionToken: '',
   source: 'local',
 }
 
@@ -51,6 +54,7 @@ export function useChannelIdentity(): IdentityState {
   const managerId = useTypedWamData('managerId')
   const chatId = useTypedWamData('chatId')
   const chatType = useTypedWamData('chatType')
+  const sessionToken = useTypedWamData('sessionToken')
 
   return useMemo(() => {
     const identity: ChannelIdentity = {
@@ -58,6 +62,7 @@ export function useChannelIdentity(): IdentityState {
       managerId: text(managerId),
       chatId: text(chatId),
       chatType: text(chatType),
+      sessionToken: text(sessionToken),
       source: 'channel',
     }
 
@@ -75,5 +80,5 @@ export function useChannelIdentity(): IdentityState {
       message:
         '채널톡에서 사용자 정보를 받지 못했어요. 창을 닫고 커맨드를 다시 실행해 주세요.',
     }
-  }, [channelId, managerId, chatId, chatType])
+  }, [channelId, managerId, chatId, chatType, sessionToken])
 }

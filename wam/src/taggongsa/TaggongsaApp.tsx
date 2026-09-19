@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useWamClose, useWamData, useWamSize } from '@channel.io/app-sdk-wam'
 import './taggongsa.css'
 import { AppProvider } from './store/AppProvider'
+import { useHydrateProfile } from './store/sync'
 import {
   NavContext,
   useApp,
@@ -130,6 +131,8 @@ function renderRoute(route: Route) {
 
 function Shell() {
   const { state, me, dispatch } = useApp()
+  // 서버에 저장된 프로필이 있으면 가져와 맞춘다. 기기를 바꿔도 이어서 쓰게 한다.
+  useHydrateProfile()
   const { close } = useWamClose()
   const [stack, setStack] = useState<Route[]>([])
   const [sheet, setSheet] = useState<GlobalSheet>(null)

@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useWamData } from '@channel.io/app-sdk-wam'
 import { useApp, useMe } from '../store/context'
+import { useProfileSync } from '../store/sync'
 import type { ClassBlock, Moment } from '../types'
 import { cx } from '../lib/cx'
 import { hashString, uid } from '../lib/id'
@@ -136,6 +137,7 @@ function blockLabel(block: ClassBlock): string {
 
 export function AiUploadSheet({ onClose }: { onClose: () => void }) {
   const { dispatch } = useApp()
+  const sync = useProfileSync()
   const me = useMe()
   const sessionToken = useWamData('sessionToken')
   const [preview, setPreview] = useState<string | null>(null)
@@ -195,6 +197,7 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
 
   const save = () => {
     dispatch({ type: 'SET_TIMETABLE', blocks: selected })
+    void sync.saveTimetable(selected)
     onClose()
   }
 
@@ -532,6 +535,7 @@ function ClassSheet({
 
 export function TimetableScreen() {
   const { dispatch, now } = useApp()
+  const sync = useProfileSync()
   const me = useMe()
   const [aiOpen, setAiOpen] = useState(false)
   const [editing, setEditing] = useState<ClassBlock | 'new' | null>(null)
@@ -539,23 +543,23 @@ export function TimetableScreen() {
   const free = getFreeState(blocks, now)
   const copy = describeFree(free, now)
 
-  const saveBlock = (block: ClassBlock) => {
-    const exists = blocks.some((b) => b.id === block.id)
-    dispatch({
-      type: 'SET_TIMETABLE',
-      blocks: exists
-        ? blocks.map((b) => (b.id === block.id ? block : b))
-        : [...blocks, block],
-    })
+  const commit = (next: ClassBlock[]) => {
+    dispatch({ type: 'SET_TIMETABLE', blocks: next })
+    void sync.saveTimetable(next)
     setEditing(null)
   }
 
+  const saveBlock = (block: ClassBlock) => {
+    const exists = blocks.some((b) => b.id === block.id)
+    commit(
+      exists
+        ? blocks.map((b) => (b.id === block.id ? block : b))
+        : [...blocks, block]
+    )
+  }
+
   const deleteBlock = (id: string) => {
-    dispatch({
-      type: 'SET_TIMETABLE',
-      blocks: blocks.filter((b) => b.id !== id),
-    })
-    setEditing(null)
+    commit(blocks.filter((b) => b.id !== id))
   }
 
   return (
