@@ -4,6 +4,7 @@ import { env } from "cloudflare:workers";
 import { withDatabase } from "../server/dist/src/database.js";
 import handler from "../server/dist/src/serverless.js";
 import { handleTimetableRequest } from "../server/dist/src/timetable-ai.js";
+import { handleApiRequest } from "../server/dist/src/api.js";
 
 const server = createServer((request, response) => {
   void withDatabase(env.DB, () => handler(request, response)).catch((error) => {
@@ -35,6 +36,13 @@ export default {
       } catch {
         return Response.json({ ok: false, ai }, { status: 503 });
       }
+    }
+    // 타공사 자체 API. D1을 쓰므로 withDatabase 안에서 실행한다.
+    if (new URL(request.url).pathname.startsWith("/api/")) {
+      const response = await withDatabase(bindings.DB, () =>
+        handleApiRequest(request, bindings),
+      );
+      if (response) return response;
     }
     return http.fetch(request, bindings, context);
   },
