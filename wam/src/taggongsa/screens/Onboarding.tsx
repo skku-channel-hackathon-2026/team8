@@ -326,7 +326,7 @@ export function Signup({ onBack }: { onBack: () => void }) {
                 >
                   <Mascot
                     size={52}
-                    color={option.role === 'fresh' ? 'green' : 'gold'}
+                    color={option.role === 'fresh' ? 'green' : 'orange'}
                     mood={option.role === 'fresh' ? 'wow' : 'smile'}
                   />
                   <span className="tg-grow">
