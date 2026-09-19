@@ -7,6 +7,17 @@ import {
   type Profile,
 } from "@tutorial/shared";
 import {
+  MeetError,
+  createRoom,
+  invite,
+  joinRoom,
+  leaveRoom,
+  listRequests,
+  listRooms,
+  respondRequest,
+  sendDm,
+} from "./meet.js";
+import {
   MissionError,
   createMission,
   listMissions,
@@ -139,6 +150,14 @@ const ROUTES: Record<string, string> = {
   "/api/submissions": "GET",
   "/api/submissions/create": "POST",
   "/api/submissions/review": "POST",
+  "/api/rooms": "GET",
+  "/api/rooms/create": "POST",
+  "/api/rooms/join": "POST",
+  "/api/rooms/leave": "POST",
+  "/api/rooms/invite": "POST",
+  "/api/requests": "GET",
+  "/api/requests/dm": "POST",
+  "/api/requests/respond": "POST",
 };
 
 export async function handleApiRequest(
@@ -259,6 +278,36 @@ export async function handleApiRequest(
       return json(await reviewSubmission(key, body));
     } catch (error) {
       if (error instanceof MissionError) {
+        return json({ error: error.code }, error.status);
+      }
+      throw error;
+    }
+  }
+
+  // ---- 만남 신청과 모임방 --------------------------------------------------
+  if (path.startsWith("/api/rooms") || path.startsWith("/api/requests")) {
+    try {
+      if (path === "/api/rooms") {
+        return json({ rooms: await listRooms(session.channelId) });
+      }
+      if (path === "/api/requests") {
+        return json({ requests: await listRequests(key, session.channelId) });
+      }
+      const body = await readJson(request);
+      if (path === "/api/rooms/create") {
+        return json(await createRoom(key, session.channelId, body), 201);
+      }
+      if (path === "/api/rooms/join") return json(await joinRoom(key, body));
+      if (path === "/api/rooms/leave") return json(await leaveRoom(key, body));
+      if (path === "/api/rooms/invite") {
+        return json(await invite(key, session.channelId, body), 201);
+      }
+      if (path === "/api/requests/dm") {
+        return json(await sendDm(key, session.channelId, body), 201);
+      }
+      return json(await respondRequest(key, body));
+    } catch (error) {
+      if (error instanceof MeetError) {
         return json({ error: error.code }, error.status);
       }
       throw error;

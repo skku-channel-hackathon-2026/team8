@@ -35,7 +35,7 @@ function fakeDatabase(seed: Record<string, unknown> = {}): AppDatabase {
       },
       first: async <T>() => {
         // 잔액 더하기: 음수가 되면 아무것도 바꾸지 않는다.
-        if (sql.includes("json_set(value_json")) {
+        if (sql.includes("'$.leaves'")) {
           const delta = Number(args[0]);
           const id = String(args[1]);
           const stored = rows.get(id);
@@ -58,6 +58,22 @@ function fakeDatabase(seed: Record<string, unknown> = {}): AppDatabase {
           }
           rows.set(id, value);
           return { id } as T;
+        }
+        // 모임 자리 차지: 정원이 찼거나 이미 멤버면 아무것도 바꾸지 않는다.
+        if (sql.includes("$.memberIds[#]")) {
+          const userId = String(args[0]);
+          const id = String(args[1]);
+          const stored = rows.get(id);
+          if (!stored) return null;
+          const doc = JSON.parse(stored) as {
+            memberIds: string[];
+            max: number;
+          };
+          if (doc.memberIds.includes(userId)) return null;
+          if (doc.memberIds.length >= doc.max) return null;
+          const members = [...doc.memberIds, userId];
+          rows.set(id, JSON.stringify({ ...doc, memberIds: members }));
+          return { members: JSON.stringify(members) } as T;
         }
         const value = rows.get(String(args[0]));
         return value ? ({ value_json: value } as T) : null;
@@ -605,4 +621,176 @@ test("a rejected submission pays nothing and can be retried", async () => {
     note: "다시 냈어요",
   });
   assert.equal(retry?.status, 201);
+});
+
+// ---------------------------------------------------------------------------
+// 만남 신청과 모임방 — 자리와 수락 여부를 서버가 정한다
+// ---------------------------------------------------------------------------
+
+const roomDraft = {
+  title: "점심 같이 먹어요",
+  theme: "play",
+  place: "학관",
+  until: 9_999_999_999_999,
+  max: 2,
+  note: "",
+};
+
+test("the last seat in a room goes to exactly one of two people", async () => {
+  const database = fakeDatabase({
+    "user:ch1:host": user("host", 0),
+    "user:ch1:bee": user("bee", 0),
+    "user:ch1:cee": user("cee", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  // 정원 2, 호스트가 한 자리를 이미 차지하므로 남는 자리는 하나뿐이다.
+  const created = await call("host", "/api/rooms/create", roomDraft);
+  const { room } = (await created?.json()) as { room: { id: string } };
+
+  const [bee, cee] = await Promise.all([
+    call("bee", "/api/rooms/join", { roomId: room.id }),
+    call("cee", "/api/rooms/join", { roomId: room.id }),
+  ]);
+  assert.deepEqual([bee?.status, cee?.status].sort(), [200, 409]);
+
+  const loser = bee?.status === 409 ? bee : cee;
+  assert.deepEqual(await loser?.json(), { error: "room_full" });
+
+  const winner = bee?.status === 200 ? bee : cee;
+  const body = (await winner?.json()) as { room: { memberIds: string[] } };
+  assert.equal(body.room.memberIds.length, 2);
+});
+
+test("joining a room you are already in is refused", async () => {
+  const database = fakeDatabase({ "user:ch1:host": user("host", 0) });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("host", "/api/rooms/create", roomDraft);
+  const { room } = (await created?.json()) as { room: { id: string } };
+
+  const again = await call("host", "/api/rooms/join", { roomId: room.id });
+  assert.equal(again?.status, 409);
+});
+
+test("a request is answered by the person who received it", async () => {
+  const database = fakeDatabase({
+    "user:ch1:from": user("from", 0),
+    "user:ch1:to": user("to", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const sent = await call("from", "/api/requests/dm", {
+    toId: "ch1:to",
+    theme: "study",
+    message: "같이 공부해요",
+  });
+  assert.equal(sent?.status, 201);
+  const { request } = (await sent?.json()) as { request: { id: string } };
+
+  // 보낸 사람이 자기 신청을 수락할 수는 없다.
+  assert.equal(
+    (
+      await call("from", "/api/requests/respond", {
+        requestId: request.id,
+        accept: true,
+      })
+    )?.status,
+    403,
+  );
+
+  const accepted = await call("to", "/api/requests/respond", {
+    requestId: request.id,
+    accept: true,
+  });
+  assert.equal(accepted?.status, 200);
+
+  // 한 번 답한 신청에는 다시 답할 수 없다.
+  assert.equal(
+    (
+      await call("to", "/api/requests/respond", {
+        requestId: request.id,
+        accept: false,
+      })
+    )?.status,
+    409,
+  );
+});
+
+test("the same person cannot be asked twice while one request waits", async () => {
+  const database = fakeDatabase({
+    "user:ch1:from": user("from", 0),
+    "user:ch1:to": user("to", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const dm = { toId: "ch1:to", theme: "study", message: "안녕하세요" };
+  assert.equal((await call("from", "/api/requests/dm", dm))?.status, 201);
+  const again = await call("from", "/api/requests/dm", dm);
+  assert.equal(again?.status, 409);
+  assert.deepEqual(await again?.json(), { error: "already_requested" });
+
+  // 자기 자신에게는 보낼 수 없다.
+  const self = await call("from", "/api/requests/dm", {
+    ...dm,
+    toId: "ch1:from",
+  });
+  assert.equal(self?.status, 403);
+});
+
+test("only people in a room may invite, and members are not invited again", async () => {
+  const database = fakeDatabase({
+    "user:ch1:host": user("host", 0),
+    "user:ch1:outsider": user("outsider", 0),
+    "user:ch1:guest": user("guest", 0),
+  });
+  const env = { APP_SECRET: secret };
+  const call = (who: string, path: string, body?: unknown) =>
+    withDatabase(database, () =>
+      handleApiRequest(asUser(tokenFor(who), path, body), env),
+    );
+
+  const created = await call("host", "/api/rooms/create", {
+    ...roomDraft,
+    max: 5,
+  });
+  const { room } = (await created?.json()) as { room: { id: string } };
+
+  assert.equal(
+    (
+      await call("outsider", "/api/rooms/invite", {
+        roomId: room.id,
+        toIds: ["ch1:guest"],
+      })
+    )?.status,
+    403,
+  );
+
+  // 호스트 자신과 이미 들어온 사람은 초대 대상에서 빠진다.
+  const invited = await call("host", "/api/rooms/invite", {
+    roomId: room.id,
+    toIds: ["ch1:guest", "ch1:host"],
+  });
+  assert.equal(invited?.status, 201);
+  const body = (await invited?.json()) as { requests: { toId: string }[] };
+  assert.deepEqual(
+    body.requests.map((r) => r.toId),
+    ["ch1:guest"],
+  );
 });

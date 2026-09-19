@@ -255,3 +255,64 @@ export const SubmissionSchema = z.object({
 });
 
 export type Submission = z.infer<typeof SubmissionSchema>;
+
+// ---- 만남 신청과 모임방 ----
+
+export const MeetThemeSchema = z.enum(["play", "study"]);
+export const RequestStatusSchema = z.enum(["pending", "accepted", "declined"]);
+
+export const RoomDraftSchema = z.object({
+  title: z.string().trim().min(1).max(60),
+  theme: MeetThemeSchema,
+  place: z.string().trim().max(40).default(""),
+  /** 모임이 끝나는 시각. epoch 밀리초 */
+  until: z.number().int().positive(),
+  max: z.number().int().min(2).max(20),
+  note: z.string().trim().max(200).default(""),
+});
+
+export type RoomDraft = z.infer<typeof RoomDraftSchema>;
+
+export const RoomSchema = RoomDraftSchema.extend({
+  id: z.string(),
+  channelId: z.string(),
+  hostId: z.string(),
+  memberIds: z.array(z.string()),
+  createdAt: z.number().int(),
+});
+
+export type Room = z.infer<typeof RoomSchema>;
+
+export const MeetRequestSchema = z.object({
+  id: z.string(),
+  channelId: z.string(),
+  kind: z.enum(["dm", "room"]),
+  fromId: z.string(),
+  toId: z.string(),
+  roomId: z.string().nullable(),
+  theme: MeetThemeSchema,
+  message: z.string(),
+  status: RequestStatusSchema,
+  createdAt: z.number().int(),
+  resolvedAt: z.number().int().nullable(),
+});
+
+export type MeetRequest = z.infer<typeof MeetRequestSchema>;
+
+export const SendDmInputSchema = z.object({
+  toId: z.string().min(1),
+  theme: MeetThemeSchema,
+  message: z.string().trim().max(200).default(""),
+});
+
+export const InviteInputSchema = z.object({
+  roomId: z.string().min(1),
+  toIds: z.array(z.string().min(1)).min(1).max(20),
+});
+
+export const RespondRequestInputSchema = z.object({
+  requestId: z.string().min(1),
+  accept: z.boolean(),
+});
+
+export const RoomIdInputSchema = z.object({ roomId: z.string().min(1) });

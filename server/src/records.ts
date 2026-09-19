@@ -129,3 +129,37 @@ export async function replaceIfStatus(
     .first<{ id: string }>();
   return row !== null;
 }
+
+/**
+ * 모임방에 한 자리를 원자적으로 차지한다.
+ * 정원이 찼거나 이미 멤버면 아무것도 바꾸지 않고 null을 돌려준다.
+ *
+ * 두 사람이 마지막 한 자리를 동시에 노려도 SQL 한 문장 안에서 갈린다.
+ */
+export async function joinRoomSlot(
+  roomKey: string,
+  userId: string,
+): Promise<string[] | null> {
+  const row = await getDatabase()
+    .prepare(
+      `UPDATE app_records
+          SET value_json = json_set(value_json, '$.memberIds[#]', ?1),
+              updated_at = CURRENT_TIMESTAMP
+        WHERE id = ?2
+          AND json_array_length(json_extract(value_json, '$.memberIds'))
+              < json_extract(value_json, '$.max')
+          AND NOT EXISTS (
+                SELECT 1 FROM json_each(value_json, '$.memberIds')
+                 WHERE value = ?1
+              )
+       RETURNING json_extract(value_json, '$.memberIds') AS members`,
+    )
+    .bind(userId, idOf("room", roomKey))
+    .first<{ members: string }>();
+  if (!row) return null;
+  try {
+    return JSON.parse(row.members) as string[];
+  } catch {
+    return null;
+  }
+}
