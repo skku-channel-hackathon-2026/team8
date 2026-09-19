@@ -1,0 +1,5 @@
+# 체크아웃 OS와 무관하게 작업 트리를 LF로 맞춘다.
+# 이게 없으면 Windows에서 core.autocrlf가 전 파일을 CRLF로 바꿔
+# prettier(--end-of-line lf 기본)가 무관한 파일까지 전부 실패시킨다.
+# 바이너리는 text=auto가 알아서 건드리지 않는다.
+* text=auto eol=lf
