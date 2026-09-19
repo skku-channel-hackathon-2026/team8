@@ -6,7 +6,6 @@ import {
 import type {
   Campus,
   ChatMessage,
-  ChatPending,
   ClassBlock,
   LedgerEntry,
   MeetRequest,
@@ -25,11 +24,11 @@ import type {
   ToastTone,
 } from '../types'
 import { ME, buildSeed } from '../data/seed'
-import { CHAT_REPLIES, REWARDS, STEP_INFO, THEME_LABEL } from '../data/labels'
+import { REWARDS, STEP_INFO, THEME_LABEL } from '../data/labels'
 import { hashPick, hashString, uid } from '../lib/id'
 import type { Profile as ServerProfile } from '@tutorial/shared'
 import type { ChannelIdentity } from '../lib/identity'
-import { isVisiblyFree, momentFromDate } from '../lib/time'
+import type { LocalSnapshot } from './mirror'
 
 export { ME }
 
@@ -42,7 +41,7 @@ export interface TutorialState {
 }
 
 export interface AppState {
-  version: 4
+  version: 5
   /** 채널톡이 준 현재 사용자. 저장된 값이 아니라 항상 호스트에서 다시 받는다. */
   identity: ChannelIdentity
   profile: Profile | null
@@ -56,8 +55,8 @@ export interface AppState {
   ledger: LedgerEntry[]
   toasts: Toast[]
   chatMessages: ChatMessage[]
-  /** 채팅방별로 상대의 응답을 흉내 내기까지 남은 대기 상태 */
-  chatPending: ChatPending[]
+  /** 서버 스냅샷을 한 번이라도 받았는지. 첫 동기화에 알림이 쏟아지는 걸 막는다. */
+  synced: boolean
   /** 지금까지 받은 알림. 토스트로 잠깐 보인 내용도 여기에 쌓인다. */
   notifications: AppNotification[]
 }
@@ -122,7 +121,7 @@ export type Action =
   | { type: 'REPORT_TASK'; taskId: string }
   | { type: 'CONFIRM_TASK'; taskId: string }
   | { type: 'SEND_CHAT_MESSAGE'; chatId: string; text: string }
-  | { type: 'TICK'; now: number }
+  | { type: 'SYNC'; snapshot: LocalSnapshot }
   | { type: 'TOAST'; text: string; tone?: ToastTone }
   | { type: 'DISMISS_TOAST'; id: string }
   | { type: 'MARK_NOTIFICATIONS_READ' }
@@ -132,7 +131,7 @@ export const AVATAR_TONES = 5
 
 export function createInitialState(identity: ChannelIdentity): AppState {
   return {
-    version: 4,
+    version: 5,
     identity,
     profile: null,
     tutorial: {
@@ -145,7 +144,7 @@ export function createInitialState(identity: ChannelIdentity): AppState {
     ledger: [],
     toasts: [],
     chatMessages: [],
-    chatPending: [],
+    synced: false,
     notifications: [],
   }
 }
@@ -398,196 +397,171 @@ function completeStep(state: AppState, step: StepId): AppState {
   )
 }
 
-/** 모임 채팅의 답장은 나를 뺀 멤버가 돌아가며 한다. */
-function responderFor(
-  state: AppState,
-  chatId: string,
-  salt: string
-): string | undefined {
-  const [kind, rest] = chatId.split(':')
-  if (kind === 'room') {
-    const room = state.rooms.find((r) => r.id === rest)
-    const others = room?.memberIds.filter((id) => id !== ME) ?? []
-    return others.length > 0 ? hashPick(others, salt) : undefined
-  }
-  return counterpartIdFor(state, chatId)
-}
-
 function chatTitle(state: AppState, chatId: string): string | undefined {
   const [kind, rest] = chatId.split(':')
   if (kind === 'room') return state.rooms.find((r) => r.id === rest)?.title
   return resolveChatPeer(state, chatId)?.nickname
 }
 
-function tick(state: AppState, now: number): AppState {
-  let next = state
-  const moment = momentFromDate(new Date())
+// ---------------------------------------------------------------------------
+// 서버 스냅샷 반영
+//
+// 예전에는 여기서 tick()이 상대의 수락·답장·완료 보고를 흉내 냈다. 이제는
+// 진짜 상대가 다른 창에서 그 일을 하고, 서버가 그 결과를 스냅샷으로 알려
+// 준다. 그래서 흉내 내던 코드는 지우고, 바뀐 것을 알아채는 코드만 남긴다.
+// ---------------------------------------------------------------------------
 
-  for (const sub of state.submissions) {
-    if (
-      sub.userId !== ME ||
-      sub.status !== 'pending' ||
-      !sub.resolveAt ||
-      sub.resolveAt > now
-    ) {
-      continue
-    }
-    const reviewer = hashPick(
-      state.students.filter((s) => s.role === 'senior'),
-      sub.id
-    )
-    const mission = state.missions.find((m) => m.id === sub.missionId)
-    next = {
-      ...next,
-      submissions: next.submissions.map((s) =>
-        s.id === sub.id
-          ? {
-              ...s,
-              status: 'approved',
-              reviewerId: reviewer.id,
-              resolveAt: undefined,
-            }
-          : s
-      ),
-      missions: next.missions.map((m) =>
-        m.id === sub.missionId
-          ? { ...m, completedCount: m.completedCount + 1 }
-          : m
-      ),
-    }
-    if (mission) {
-      next = grant(next, mission.reward, `튜토리얼 인증 · ${mission.title}`)
-      next = toast(
-        next,
-        `${reviewer.nickname}님이 인증을 인정했어요 · +${mission.reward}잎`,
-        'leaf',
-        TUTORIAL
-      )
-    }
-  }
+/** 스냅샷에서 달라진 것을 찾아 알림과 토스트를 만든다. */
+function noticesFor(before: AppState, after: AppState): AppState {
+  let next = after
 
-  for (const pending of state.chatPending) {
-    if (pending.at > now) continue
-    const peerId = responderFor(
-      state,
-      pending.chatId,
-      `${pending.chatId}:${pending.at}`
-    )
-    if (peerId) {
-      const reply = hashPick(CHAT_REPLIES, `${pending.chatId}:${now}`)
-      next = addChatMessage(next, pending.chatId, peerId, reply, now)
-      next = notify(next, `${nick(state, peerId)}: ${reply}`, 'default', {
-        name: 'chat',
-        chatId: pending.chatId,
-        title: chatTitle(state, pending.chatId),
-      })
-    }
-    next = {
-      ...next,
-      chatPending: next.chatPending.filter((p) => p !== pending),
-    }
-  }
-
-  for (const req of state.requests) {
-    if (
-      req.fromId !== ME ||
-      req.status !== 'pending' ||
-      !req.resolveAt ||
-      req.resolveAt > now
-    ) {
-      continue
-    }
-    next = {
-      ...next,
-      requests: next.requests.map((r) =>
-        r.id === req.id ? { ...r, status: 'accepted', resolveAt: undefined } : r
-      ),
-    }
-    const who = nick(state, req.toId)
-    if (req.kind === 'room' && req.roomId) {
-      next = {
-        ...next,
-        rooms: next.rooms.map((room) =>
-          room.id === req.roomId &&
-          !room.memberIds.includes(req.toId) &&
-          room.memberIds.length < room.max
-            ? { ...room, memberIds: [...room.memberIds, req.toId] }
-            : room
-        ),
+  const oldRequests = new Map(before.requests.map((r) => [r.id, r]))
+  for (const request of after.requests) {
+    const old = oldRequests.get(request.id)
+    if (!old) {
+      if (request.toId === ME && request.status === 'pending') {
+        const room = request.roomId
+          ? after.rooms.find((r) => r.id === request.roomId)
+          : undefined
+        next = notify(
+          next,
+          room
+            ? `${nick(after, request.fromId)}님이 '${room.title}' 모임에 초대했어요`
+            : `${nick(after, request.fromId)}님이 1대1 ${THEME_LABEL[request.theme]} 신청을 보냈어요`,
+          'default',
+          MEET,
+          request.createdAt
+        )
       }
-      const chatId = roomChatId(req.roomId)
-      next = addChatMessage(
-        next,
-        chatId,
-        SYSTEM_SENDER,
-        `${who}님이 들어왔어요`,
-        now
-      )
-      next = toast(next, `${who}님이 모임에 들어왔어요`, 'default', {
-        name: 'chat',
-        chatId,
-        title: chatTitle(next, chatId),
-      })
-    } else {
-      next = openDmChat(next, req)
-      next = addChatMessage(
-        next,
-        `dm:${req.toId}`,
-        req.toId,
-        `신청 수락했어요! ${THEME_LABEL[req.theme]} 같이 해요`,
-        now
-      )
+      continue
+    }
+    // 내가 보낸 신청에 상대가 답했다.
+    if (old.status === 'pending' && request.status !== 'pending') {
+      if (request.fromId !== ME) continue
+      const who = nick(after, request.toId)
+      next =
+        request.status === 'accepted'
+          ? toast(next, `${who}님이 신청을 수락했어요!`, 'default', {
+              name: 'chat',
+              chatId: `dm:${request.toId}`,
+              title: who,
+            })
+          : toast(next, `${who}님이 신청을 거절했어요`, 'default', MEET)
+    }
+  }
+
+  const oldTasks = new Map(before.tasks.map((t) => [t.id, t]))
+  for (const task of after.tasks) {
+    const old = oldTasks.get(task.id)
+    if (!old || old.status === task.status) continue
+    if (task.requesterId === ME && task.status === 'assigned') {
       next = toast(
         next,
-        `${who}님이 ${THEME_LABEL[req.theme]} 신청을 수락했어요!`,
+        `${nick(after, task.workerId)}님이 공강을 팔았어요 · ${task.title}`,
         'default',
-        { name: 'chat', chatId: `dm:${req.toId}`, title: who }
+        MARKET
+      )
+    } else if (task.requesterId === ME && task.status === 'reported') {
+      next = toast(
+        next,
+        `${nick(after, task.workerId)}님이 완료를 보고했어요`,
+        'default',
+        MARKET
+      )
+    } else if (task.workerId === ME && task.status === 'completed') {
+      next = toast(
+        next,
+        `${nick(after, task.requesterId)}님이 완료를 확인했어요 · +${task.reward}잎`,
+        'leaf',
+        MARKET
       )
     }
   }
 
-  for (const task of state.tasks) {
-    if (!task.autoAt || task.autoAt > now) continue
-    if (task.requesterId === ME && task.status === 'open') {
-      const free = state.students.filter((s) => isVisiblyFree(s, moment))
-      const worker = hashPick(free.length > 0 ? free : state.students, task.id)
-      next = patchTask(next, task.id, {
-        status: 'assigned',
-        workerId: worker.id,
-        autoAt: now + 8000,
-      })
-      next = toast(
-        next,
-        `${worker.nickname}님이 공강을 팔았어요 · ${task.title}`,
-        'default',
-        MARKET
-      )
-    } else if (task.requesterId === ME && task.status === 'assigned') {
-      next = patchTask(next, task.id, { status: 'reported', autoAt: undefined })
-      next = toast(
-        next,
-        `${nick(state, task.workerId)}님이 완료를 보고했어요`,
-        'default',
-        MARKET
-      )
-    } else if (task.workerId === ME && task.status === 'reported') {
-      next = patchTask(next, task.id, {
-        status: 'completed',
-        autoAt: undefined,
-      })
-      next = grant(next, task.reward, `공강 판매 · ${task.title}`)
-      next = toast(
-        next,
-        `${nick(state, task.requesterId)}님이 완료를 확인했어요 · +${task.reward}잎`,
-        'leaf',
-        MARKET
-      )
-    } else {
-      next = patchTask(next, task.id, { autoAt: undefined })
+  const oldSubmissions = new Map(before.submissions.map((s) => [s.id, s]))
+  for (const submission of after.submissions) {
+    const old = oldSubmissions.get(submission.id)
+    const mission = after.missions.find((m) => m.id === submission.missionId)
+    if (!old) {
+      // 내가 만든 튜토리얼에 새 인증이 들어왔다.
+      if (submission.userId !== ME && submission.status === 'pending') {
+        next = notify(
+          next,
+          `${nick(after, submission.userId)}님이 '${mission?.title ?? '튜토리얼'}' 인증을 보냈어요`,
+          'default',
+          TUTORIAL,
+          submission.createdAt
+        )
+      }
+      continue
     }
+    if (
+      old.status === 'pending' &&
+      submission.status !== 'pending' &&
+      submission.userId === ME
+    ) {
+      next =
+        submission.status === 'approved'
+          ? toast(
+              next,
+              `인증이 인정됐어요 · +${mission?.reward ?? 0}잎`,
+              'leaf',
+              TUTORIAL
+            )
+          : toast(
+              next,
+              '인증이 반려됐어요. 다시 도전해 보세요',
+              'default',
+              TUTORIAL
+            )
+    }
+  }
+
+  const seen = new Set(before.chatMessages.map((m) => m.id))
+  for (const message of after.chatMessages) {
+    if (message.senderId === ME || seen.has(message.id)) continue
+    next = notify(
+      next,
+      `${nick(after, message.senderId)}: ${message.text}`,
+      'default',
+      {
+        name: 'chat',
+        chatId: message.chatId,
+        title: chatTitle(after, message.chatId),
+      }
+    )
   }
 
   return next
+}
+
+function applySync(state: AppState, snapshot: LocalSnapshot): AppState {
+  // 단계는 되돌아가지 않는다. 방금 로컬에서 끝낸 단계가 서버 응답보다
+  // 먼저 켜져 있을 수 있어서, 둘 중 켜진 쪽을 남긴다.
+  const done = state.tutorial.done.map(
+    (local, index) => local || (snapshot.steps[index] ?? false)
+  )
+
+  const after: AppState = {
+    ...state,
+    // 시간표와 공개 여부는 이 화면에서만 바꾸므로 스냅샷으로 덮지 않는다.
+    profile: state.profile
+      ? { ...state.profile, leaves: snapshot.leaves }
+      : state.profile,
+    tutorial: { ...state.tutorial, done },
+    students: snapshot.students,
+    missions: snapshot.missions,
+    submissions: snapshot.submissions,
+    rooms: snapshot.rooms,
+    requests: snapshot.requests,
+    tasks: snapshot.tasks,
+    ledger: snapshot.ledger,
+    chatMessages: snapshot.chatMessages,
+    synced: true,
+  }
+
+  // 첫 동기화에서는 알리지 않는다. 그동안 쌓인 것이 모두 '새것'으로 보인다.
+  return state.synced ? noticesFor(state, after) : after
 }
 
 export function reducer(state: AppState, action: Action): AppState {
@@ -642,7 +616,7 @@ export function reducer(state: AppState, action: Action): AppState {
           // 저장된 신원은 믿지 않는다. 지금 호스트가 준 값이 기준이다.
           identity: state.identity,
           chatMessages: action.state.chatMessages ?? [],
-          chatPending: action.state.chatPending ?? [],
+          synced: false,
           notifications: action.state.notifications ?? [],
           toasts: [],
         },
@@ -664,9 +638,13 @@ export function reducer(state: AppState, action: Action): AppState {
           showFree: server.showFree,
           tone: server.tone,
           timetable: server.timetable,
-          // 은행잎은 아직 서버가 계산하지 않는다. 서버 값으로 덮으면 0이 되므로
-          // 원장이 서버로 옮겨갈 때까지 로컬 값을 유지한다.
-          leaves: state.profile?.leaves ?? 0,
+          leaves: server.leaves,
+        },
+        tutorial: {
+          ...state.tutorial,
+          done: state.tutorial.done.map(
+            (local, index) => local || (server.steps[index] ?? false)
+          ),
         },
       }
     }
@@ -785,7 +763,6 @@ export function reducer(state: AppState, action: Action): AppState {
         photo: action.photo,
         status: 'pending',
         createdAt: Date.now(),
-        resolveAt: Date.now() + 4500,
       }
       return toast(
         { ...state, submissions: [submission, ...state.submissions] },
@@ -846,7 +823,6 @@ export function reducer(state: AppState, action: Action): AppState {
         message: action.message,
         status: 'pending',
         createdAt: Date.now(),
-        resolveAt: Date.now() + 5000,
       }
       return toast(
         { ...state, requests: [request, ...state.requests] },
@@ -988,7 +964,7 @@ export function reducer(state: AppState, action: Action): AppState {
         (id) => !already.has(id) && !room.memberIds.includes(id)
       )
       if (targets.length === 0) return state
-      const created: MeetRequest[] = targets.map((toId, index) => ({
+      const created: MeetRequest[] = targets.map((toId) => ({
         id: uid('q'),
         kind: 'room',
         fromId: ME,
@@ -998,7 +974,6 @@ export function reducer(state: AppState, action: Action): AppState {
         message: `'${room.title}' 모임에 초대해요`,
         status: 'pending',
         createdAt: Date.now(),
-        resolveAt: Date.now() + 3000 + index * 1800,
       }))
       return toast(
         { ...state, requests: [...created, ...state.requests] },
@@ -1024,7 +999,6 @@ export function reducer(state: AppState, action: Action): AppState {
         requesterId: ME,
         status: 'open',
         createdAt: Date.now(),
-        autoAt: Date.now() + 6000,
       }
       const next = grant(
         { ...state, tasks: [task, ...state.tasks] },
@@ -1044,7 +1018,7 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!task || task.requesterId !== ME || task.status !== 'open')
         return state
       const next = grant(
-        patchTask(state, task.id, { status: 'cancelled', autoAt: undefined }),
+        patchTask(state, task.id, { status: 'cancelled' }),
         task.reward,
         `공강 사기 취소 · ${task.title} (환불)`
       )
@@ -1073,10 +1047,7 @@ export function reducer(state: AppState, action: Action): AppState {
       if (!task || task.workerId !== ME || task.status !== 'assigned')
         return state
       return toast(
-        patchTask(state, task.id, {
-          status: 'reported',
-          autoAt: Date.now() + 4000,
-        }),
+        patchTask(state, task.id, { status: 'reported' }),
         '완료를 보고했어요. 확인되면 보수가 들어와요',
         'default',
         MARKET
@@ -1105,24 +1076,11 @@ export function reducer(state: AppState, action: Action): AppState {
         text,
         at: Date.now(),
       }
-      const already = state.chatPending.some((p) => p.chatId === action.chatId)
-      return {
-        ...state,
-        chatMessages: [...state.chatMessages, message],
-        chatPending: already
-          ? state.chatPending
-          : [
-              ...state.chatPending,
-              {
-                chatId: action.chatId,
-                at: Date.now() + 1200 + (hashString(message.id) % 1400),
-              },
-            ],
-      }
+      return { ...state, chatMessages: [...state.chatMessages, message] }
     }
 
-    case 'TICK':
-      return tick(state, action.now)
+    case 'SYNC':
+      return applySync(state, action.snapshot)
 
     case 'TOAST':
       return toast(state, action.text, action.tone)
