@@ -166,9 +166,3 @@ export interface Moment {
   day: number
   minutes: number
 }
-
-export interface ClockSetting {
-  mode: 'demo' | 'real'
-  day: number
-  minutes: number
-}

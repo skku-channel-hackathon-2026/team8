@@ -8,13 +8,11 @@ import type {
   ChatMessage,
   ChatPending,
   ClassBlock,
-  ClockSetting,
   LedgerEntry,
   MeetRequest,
   MeetTheme,
   Mission,
   MissionCategory,
-  Moment,
   Profile,
   Role,
   Room,
@@ -56,7 +54,6 @@ export interface AppState {
   rooms: Room[]
   tasks: Task[]
   ledger: LedgerEntry[]
-  clock: ClockSetting
   toasts: Toast[]
   chatMessages: ChatMessage[]
   /** 채팅방별로 상대의 응답을 흉내 내기까지 남은 대기 상태 */
@@ -124,7 +121,6 @@ export type Action =
   | { type: 'TAKE_TASK'; taskId: string }
   | { type: 'REPORT_TASK'; taskId: string }
   | { type: 'CONFIRM_TASK'; taskId: string }
-  | { type: 'SET_CLOCK'; clock: ClockSetting }
   | { type: 'SEND_CHAT_MESSAGE'; chatId: string; text: string }
   | { type: 'TICK'; now: number }
   | { type: 'TOAST'; text: string; tone?: ToastTone }
@@ -133,13 +129,6 @@ export type Action =
   | { type: 'SKIP_INTRO' }
 
 export const AVATAR_TONES = 5
-
-/** 데모 시각의 기본값은 수요일 13:10이다. 주말이나 밤에 시연해도 공강인 학생이 보이게 하기 위함이다. */
-export const DEFAULT_CLOCK: ClockSetting = {
-  mode: 'demo',
-  day: 2,
-  minutes: 13 * 60 + 10,
-}
 
 export function createInitialState(identity: ChannelIdentity): AppState {
   return {
@@ -154,18 +143,11 @@ export function createInitialState(identity: ChannelIdentity): AppState {
     },
     ...buildSeed(),
     ledger: [],
-    clock: DEFAULT_CLOCK,
     toasts: [],
     chatMessages: [],
     chatPending: [],
     notifications: [],
   }
-}
-
-export function momentOf(clock: ClockSetting): Moment {
-  return clock.mode === 'demo'
-    ? { day: clock.day, minutes: clock.minutes }
-    : momentFromDate(new Date())
 }
 
 export function findPerson(
@@ -439,7 +421,7 @@ function chatTitle(state: AppState, chatId: string): string | undefined {
 
 function tick(state: AppState, now: number): AppState {
   let next = state
-  const moment = momentOf(state.clock)
+  const moment = momentFromDate(new Date())
 
   for (const sub of state.submissions) {
     if (
@@ -659,7 +641,6 @@ export function reducer(state: AppState, action: Action): AppState {
           ...action.state,
           // 저장된 신원은 믿지 않는다. 지금 호스트가 준 값이 기준이다.
           identity: state.identity,
-          clock: action.state.clock ?? DEFAULT_CLOCK,
           chatMessages: action.state.chatMessages ?? [],
           chatPending: action.state.chatPending ?? [],
           notifications: action.state.notifications ?? [],
@@ -1113,9 +1094,6 @@ export function reducer(state: AppState, action: Action): AppState {
         MARKET
       )
     }
-
-    case 'SET_CLOCK':
-      return { ...state, clock: action.clock }
 
     case 'SEND_CHAT_MESSAGE': {
       const text = action.text.trim()

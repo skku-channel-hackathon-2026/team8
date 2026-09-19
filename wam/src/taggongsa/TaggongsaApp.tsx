@@ -14,7 +14,6 @@ import { ThemeContext } from './store/theme'
 import type { Toast } from './types'
 import { useChannelIdentity } from './lib/identity'
 import { loadThemePref, saveThemePref, type ThemePref } from './lib/theme'
-import { DAY_LABELS, fmt } from './lib/time'
 import { Icon } from './ui/Icon'
 import { Leaf, Mascot } from './ui/Mascot'
 import { Empty, IconButton } from './ui/primitives'
@@ -22,7 +21,7 @@ import { ChatListScreen, ChatScreen } from './screens/Chat'
 import { MarketScreen } from './screens/Market'
 import { MeetScreen, RoomScreen } from './screens/Meet'
 import { MenuScreen } from './screens/Menu'
-import { ChargeSheet, ClockSheet, MyPage } from './screens/MyPage'
+import { ChargeSheet, MyPage } from './screens/MyPage'
 import { NotificationsScreen } from './screens/Notifications'
 import { Login, Signup, Welcome } from './screens/Onboarding'
 import { TimetableScreen } from './screens/Timetable'
@@ -216,20 +215,6 @@ function Shell() {
               onClick={nav.back}
             />
             <span className="tg-header__title">{routeTitle(top)}</span>
-            {state.clock.mode === 'demo' && (
-              <button
-                type="button"
-                className="tg-clockchip"
-                onClick={() => setSheet('clock')}
-                title="기준 시각 바꾸기"
-              >
-                <Icon
-                  name="clock"
-                  size={14}
-                />
-                {DAY_LABELS[state.clock.day]} {fmt(state.clock.minutes)}
-              </button>
-            )}
             <button
               type="button"
               className="tg-leafchip"
@@ -287,7 +272,6 @@ function Shell() {
         </button>
       )}
       {sheet === 'charge' && <ChargeSheet onClose={() => setSheet(null)} />}
-      {sheet === 'clock' && <ClockSheet onClose={() => setSheet(null)} />}
       <Toasts />
     </NavContext.Provider>
   )
