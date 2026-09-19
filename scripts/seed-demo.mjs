@@ -9,10 +9,11 @@
 //   node scripts/seed-demo.mjs --for sunbae            내 계정으로 신청까지 보냄
 //   node scripts/seed-demo.mjs --base <배포주소> --channel <채널id>
 //
-// 배포된 주소에 채울 때는 서명 토큰이 필요하므로 APP_SECRET을 환경 변수로
-// 넘긴다. 명령줄에 적으면 셸 기록에 남으니 넣지 않는다.
+// 배포된 주소에 채울 때는 채널톡과 같은 방식으로 서명한 토큰이 필요하다.
+// 앱 비밀 키는 물어봐서 받는다. 명령줄에 적으면 셸 기록에 남기 때문이다.
 //
-//   APP_SECRET=... node scripts/seed-demo.mjs --base https://... --channel abc123
+//   node scripts/seed-demo.mjs --base https://... --channel <채널id> --check
+//   node scripts/seed-demo.mjs --base https://... --channel <채널id>
 
 import { createHmac } from "node:crypto";
 
@@ -27,6 +28,7 @@ function readArgs(argv) {
     if (key === "--base") args.base = argv[++i] ?? args.base;
     else if (key === "--channel") args.channel = argv[++i] ?? "";
     else if (key === "--for") args.for = argv[++i] ?? "";
+    else if (key === "--check") args.check = true;
     else if (key === "--help" || key === "-h") args.help = true;
     else {
       console.error(`알 수 없는 옵션: ${key}`);
@@ -45,8 +47,10 @@ if (args.help) {
   --base     서버 주소 (기본: http://127.0.0.1:8787)
   --channel  배포된 서버에 채울 때의 채널 id
   --for      이 사람에게 1대1 신청과 모임 초대를 보낸다 (데모 시작 시 알림)
+  --check    아무것도 만들지 않고, 키와 채널 id가 맞는지만 확인한다
 
-배포된 서버에는 APP_SECRET 환경 변수가 필요하다.`);
+배포된 주소에 채울 때는 앱 비밀 키가 필요하다. 키는 물어봐서 받으며,
+화면에 찍지도 셸 기록에 남기지도 않는다. APP_SECRET 환경 변수로 줘도 된다.`);
   process.exit(0);
 }
 
@@ -55,13 +59,53 @@ const isLocal = host === "127.0.0.1" || host === "localhost";
 
 if (!isLocal && !args.channel) {
   console.error("배포된 주소에 채우려면 --channel <채널id>가 필요합니다.");
-  process.exit(1);
-}
-if (!isLocal && !process.env.APP_SECRET) {
-  console.error("배포된 주소에 채우려면 APP_SECRET 환경 변수가 필요합니다.");
+  console.error("Desk 주소창의 /channels/<여기>/ 부분입니다.");
   process.exit(1);
 }
 
+/**
+ * 앱 비밀 키를 받는다.
+ *
+ * 명령줄에 적으면 셸 기록에 남고, 어깨 너머로도 보인다. 물어봐서 받되
+ * 입력하는 동안 화면에 찍지 않는다.
+ */
+async function askSecret() {
+  if (process.env.APP_SECRET) return process.env.APP_SECRET;
+  if (!process.stdin.isTTY) {
+    console.error("앱 비밀 키가 필요합니다. APP_SECRET 환경 변수로 주세요.");
+    process.exit(1);
+  }
+  // Ctrl+C와 백스페이스. 날것으로 적으면 소스에 제어문자가 박힌다.
+  const ETX = String.fromCharCode(3);
+  const BACKSPACE = String.fromCharCode(127);
+
+  process.stdout.write("앱 비밀 키 (화면에 보이지 않습니다): ");
+  process.stdin.setRawMode(true);
+  process.stdin.resume();
+  process.stdin.setEncoding("utf8");
+
+  let typed = "";
+  for await (const chunk of process.stdin) {
+    if (chunk === "\r" || chunk === "\n") break;
+    if (chunk === ETX) {
+      process.stdout.write("\n취소했습니다.\n");
+      process.exit(1);
+    }
+    if (chunk === BACKSPACE || chunk === "\b") typed = typed.slice(0, -1);
+    else typed += chunk;
+  }
+  process.stdin.setRawMode(false);
+  process.stdin.pause();
+  process.stdout.write("\n");
+
+  if (!typed.trim()) {
+    console.error("키가 비어 있습니다.");
+    process.exit(1);
+  }
+  return typed.trim();
+}
+
+const secret = isLocal ? "" : await askSecret();
 const channelId = isLocal ? "local-preview" : args.channel;
 
 /**
@@ -78,7 +122,7 @@ function tokenFor(managerId) {
     expiresAt: Date.now() + 12 * 60 * 60 * 1000,
   };
   const body = Buffer.from(JSON.stringify(session)).toString("base64url");
-  const signature = createHmac("sha256", process.env.APP_SECRET)
+  const signature = createHmac("sha256", secret)
     .update("taggongsa-wam-session\0")
     .update(body)
     .digest("base64url");
@@ -370,7 +414,38 @@ async function main() {
   console.log(`\n서버: ${args.base}`);
   console.log(`채널: ${channelId}\n`);
 
-  console.log("사람 만들기");
+  // 사람 일곱을 만들어 놓고 나서 키가 틀렸다는 걸 알면 늦다. 먼저 한 번 묻는다.
+  const probe = await call(PEOPLE[0].id, "/api/sync");
+  if (probe.status === 401) {
+    console.error("서버가 토큰을 거절했습니다. 앱 비밀 키를 다시 확인하세요.");
+    process.exit(1);
+  }
+  if (probe.status !== 200) {
+    console.error(`서버가 ${probe.status}로 답했습니다:`, probe.body);
+    console.error("배포가 끝났는지 /api/ready로 확인하세요.");
+    process.exit(1);
+  }
+
+  const already = probe.body.students ?? [];
+  console.log(`이 채널에 이미 있는 사람: ${already.length}명`);
+  if (already.length > 0) {
+    console.log(`  ${already.map((s) => s.nickname).join(", ")}`);
+  }
+
+  if (args.check) {
+    console.log(
+      "\n키와 채널 id가 맞습니다. 채우려면 --check 없이 다시 돌리세요.",
+    );
+    if (already.length === 0) {
+      console.log("다만 이 채널에는 아직 아무도 없어서, 채널 id가 맞는지는");
+      console.log(
+        "여기서 알 수 없습니다. Desk에서 한 명 가입한 뒤 다시 보세요.",
+      );
+    }
+    return;
+  }
+
+  console.log("\n사람 만들기");
   for (const [index, person] of PEOPLE.entries()) {
     const label = person.role === "senior" ? "헌내기" : "새내기";
     const created = await step(`${person.nickname} (${label})`, () =>
