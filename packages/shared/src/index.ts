@@ -164,8 +164,17 @@ export const TaskDraftSchema = z.object({
   title: z.string().trim().min(1).max(60),
   detail: z.string().trim().max(300).default(""),
   place: z.string().trim().max(40).default(""),
-  /** 마감 시각. epoch 밀리초 */
-  deadline: z.number().int().positive(),
+  /**
+   * 마감 시각. 자정부터 흐른 분 — 수업 시간표와 같은 단위다.
+   *
+   * 화면은 이 값을 "18:30까지"로 그대로 그린다. epoch 밀리초를 넣으면
+   * 말이 안 되는 시각이 찍히므로, 하루를 넘는 값은 여기서 막는다.
+   */
+  deadline: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60),
   /** 예상 소요 분 */
   duration: z.number().int().min(5).max(480),
   reward: z.number().int().min(1).max(10_000),
@@ -275,8 +284,12 @@ export const RoomDraftSchema = z.object({
   title: z.string().trim().min(1).max(60),
   theme: MeetThemeSchema,
   place: z.string().trim().max(40).default(""),
-  /** 모임이 끝나는 시각. epoch 밀리초 */
-  until: z.number().int().positive(),
+  /** 모임이 끝나는 시각. 자정부터 흐른 분 — deadline과 같은 단위다. */
+  until: z
+    .number()
+    .int()
+    .min(0)
+    .max(24 * 60),
   max: z.number().int().min(2).max(20),
   note: z.string().trim().max(200).default(""),
 });
