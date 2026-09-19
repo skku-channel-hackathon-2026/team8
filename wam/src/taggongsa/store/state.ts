@@ -1,4 +1,5 @@
 import type {
+  Campus,
   ClassBlock,
   ClockSetting,
   LedgerEntry,
@@ -32,7 +33,7 @@ export interface TutorialState {
 }
 
 export interface AppState {
-  version: 1
+  version: 2
   profile: Profile | null
   tutorial: TutorialState
   students: Student[]
@@ -75,7 +76,14 @@ export interface TaskDraft {
 }
 
 export type Action =
-  | { type: 'SIGN_UP'; role: Role; department: string; nickname: string }
+  | {
+      type: 'SIGN_UP'
+      role: Role
+      campus: Campus
+      department: string
+      nickname: string
+    }
+  | { type: 'LOAD_ACCOUNT'; state: AppState }
   | { type: 'LOG_OUT' }
   | { type: 'SET_TIMETABLE'; blocks: ClassBlock[] }
   | { type: 'SET_SHOW_FREE'; value: boolean }
@@ -114,7 +122,7 @@ export const DEFAULT_CLOCK: ClockSetting = {
 
 export function createInitialState(): AppState {
   return {
-    version: 1,
+    version: 2,
     profile: null,
     tutorial: {
       done: [false, false, false, false],
@@ -318,6 +326,7 @@ export function reducer(state: AppState, action: Action): AppState {
         id: ME,
         nickname: action.nickname,
         department: action.department,
+        campus: action.campus,
         role: action.role,
         timetable: [],
         showFree: true,
@@ -335,6 +344,16 @@ export function reducer(state: AppState, action: Action): AppState {
         'leaf'
       )
     }
+
+    case 'LOAD_ACCOUNT':
+      return toast(
+        {
+          ...action.state,
+          clock: action.state.clock ?? DEFAULT_CLOCK,
+          toasts: [],
+        },
+        `다시 만나서 반가워요, ${action.state.profile?.nickname ?? ''}님`
+      )
 
     case 'LOG_OUT':
       return createInitialState()

@@ -1,8 +1,29 @@
-import type { MeetTheme, MissionCategory, Role, TaskCategory } from '../types'
+import type {
+  Campus,
+  MeetTheme,
+  MissionCategory,
+  Role,
+  TaskCategory,
+} from '../types'
 
 export const ROLE_LABEL: Record<Role, string> = {
   fresh: '새내기',
   senior: '헌내기',
+}
+
+export const CAMPUS_LABEL: Record<Campus, string> = {
+  humanities: '인문사회과학캠퍼스',
+  natural: '자연과학캠퍼스',
+}
+
+export const CAMPUS_SHORT: Record<Campus, string> = {
+  humanities: '인사캠',
+  natural: '자과캠',
+}
+
+export const CAMPUS_PLACE: Record<Campus, string> = {
+  humanities: '서울 · 명륜',
+  natural: '수원 · 율전',
 }
 
 export const THEME_LABEL: Record<MeetTheme, string> = {

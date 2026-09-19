@@ -30,9 +30,11 @@ import {
   createTutorialTargetToken,
   readTutorialTargetToken,
 } from "./target-token.js";
+import { createWamSessionToken } from "./wam-session.js";
 
 const tutorialMessage = "This is a test message sent by a manager.";
 const botMessage = "This is a test message sent by a bot.";
+const WAM_SESSION_TTL_MS = 3 * 60 * 60 * 1000;
 
 @Extension({ name: "command", systemVersion: "v1" })
 export class CommandExtension {
@@ -99,6 +101,14 @@ export class TutorialFunctions {
       managerId,
       message: tutorialMessage,
       targetToken,
+      sessionToken: createWamSessionToken(
+        {
+          channelId: ctx.channel.id,
+          managerId,
+          expiresAt: Date.now() + WAM_SESSION_TTL_MS,
+        },
+        appSecret,
+      ),
     } satisfies TutorialWamArgs;
 
     return {

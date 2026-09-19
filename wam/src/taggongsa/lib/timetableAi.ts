@@ -1,54 +1,119 @@
 import type { ClassBlock } from '../types'
-import { hashString, uid } from './id'
+import { uid } from './id'
 
-type Sample = Array<
-  [name: string, day: number, start: string, end: string, place: string]
->
+const ENDPOINT = '/api/timetable/parse'
+const MAX_EDGE = 2000
 
-const SAMPLES: Sample[] = [
-  [
-    ['경영학원론', 0, '10:30', '11:45', '경영관 33101'],
-    ['경영학원론', 2, '10:30', '11:45', '경영관 33101'],
-    ['대학글쓰기', 1, '09:00', '10:15', '호암관 50212'],
-    ['대학글쓰기', 3, '09:00', '10:15', '호암관 50212'],
-    ['미적분학1', 0, '15:00', '16:15', '수선관 61234'],
-    ['미적분학1', 2, '15:00', '16:15', '수선관 61234'],
-    ['성균인성', 1, '13:30', '15:15', '600주년기념관 9B107'],
-    ['컴퓨팅사고', 3, '15:00', '16:45', '국제관 9B310'],
-    ['영어회화', 4, '10:30', '12:15', '퇴계인문관 31207'],
-  ],
-  [
-    ['사회학개론', 0, '09:00', '10:15', '수선관 61102'],
-    ['사회학개론', 2, '09:00', '10:15', '수선관 61102'],
-    ['통계학입문', 1, '12:00', '13:15', '다산경제관 32304'],
-    ['통계학입문', 3, '12:00', '13:15', '다산경제관 32304'],
-    ['성균인성', 2, '14:00', '15:45', '600주년기념관 9B107'],
-    ['대학글쓰기', 4, '09:00', '10:45', '호암관 50212'],
-    ['심리학개론', 0, '13:30', '14:45', '호암관 50401'],
-  ],
-]
+export class TimetableAiError extends Error {
+  constructor(readonly code: string) {
+    super(code)
+  }
+}
 
-function toMinutes(value: string): number {
-  const [h, m] = value.split(':').map(Number)
-  return h * 60 + m
+const MESSAGES: Record<string, string> = {
+  ai_not_configured:
+    'AI 시간표 인식이 아직 켜지지 않았어요. 운영진이 AI 키를 등록하면 쓸 수 있어요. 지금은 직접 입력해 주세요.',
+  unauthorized: '채널톡에서 앱을 다시 열고 시도해 주세요.',
+  not_timetable: '시간표 이미지가 아닌 것 같아요. 시간표 화면을 캡처해 주세요.',
+  no_classes:
+    '수업을 찾지 못했어요. 시간표 전체가 보이도록 더 선명하게 캡처해 주세요.',
+  busy: '지금 요청이 많아요. 잠시 후 다시 시도해 주세요.',
+  too_large: '이미지가 너무 커요. 화면 캡처 한 장으로 올려 주세요.',
+  bad_image: '이미지를 읽을 수 없어요. PNG나 JPG로 다시 올려 주세요.',
+  refused: '이 이미지는 처리할 수 없어요. 시간표 캡처만 올려 주세요.',
+}
+
+export function aiErrorMessage(code: string): string {
+  return (
+    MESSAGES[code] ??
+    '시간표를 읽지 못했어요. 잠시 후 다시 시도하거나 직접 입력해 주세요.'
+  )
+}
+
+/** 글자가 잘 보이도록 해상도를 넉넉히 두고 JPEG로 줄인다. */
+function encodeImage(file: File): Promise<{ mediaType: string; data: string }> {
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(file)
+    const image = new Image()
+    image.onerror = () => {
+      URL.revokeObjectURL(url)
+      reject(new TimetableAiError('bad_image'))
+    }
+    image.onload = () => {
+      URL.revokeObjectURL(url)
+      const scale = Math.min(1, MAX_EDGE / Math.max(image.width, image.height))
+      const canvas = document.createElement('canvas')
+      canvas.width = Math.round(image.width * scale)
+      canvas.height = Math.round(image.height * scale)
+      const context = canvas.getContext('2d')
+      if (!context) {
+        reject(new TimetableAiError('bad_image'))
+        return
+      }
+      context.fillStyle = '#ffffff'
+      context.fillRect(0, 0, canvas.width, canvas.height)
+      context.drawImage(image, 0, 0, canvas.width, canvas.height)
+      const dataUrl = canvas.toDataURL('image/jpeg', 0.9)
+      resolve({
+        mediaType: 'image/jpeg',
+        data: dataUrl.slice(dataUrl.indexOf(',') + 1),
+      })
+    }
+    image.src = url
+  })
+}
+
+interface ServerClass {
+  name: string
+  day: number
+  start: number
+  end: number
+  room: string
 }
 
 /**
- * 시간표 이미지에서 수업 목록을 읽는다.
- *
- * 지금은 데모용 모의 구현이라 파일 이름에 따라 예시 시간표 중 하나를 돌려준다.
- * 실제 서비스에서는 서버 Function이 이미지를 비전 모델에 보내고,
- * 과목명·요일·시간·강의실을 JSON으로 받아 이 형태로 돌려주도록 바꾸면 된다.
+ * 시간표 이미지를 서버로 보내 AI가 읽은 수업 목록을 받는다.
+ * 서버는 Claude로 이미지 속 글자를 그대로 옮겨 적고, 시간과 요일을 한 번 더 검증한다.
  */
-export async function recognizeTimetable(file: File): Promise<ClassBlock[]> {
-  await new Promise((resolve) => setTimeout(resolve, 2200))
-  const sample = SAMPLES[hashString(file.name) % SAMPLES.length]
-  return sample.map(([name, day, start, end, place]) => ({
-    id: uid('c'),
-    name,
-    day,
-    start: toMinutes(start),
-    end: toMinutes(end),
-    place,
-  }))
+export async function recognizeTimetable(
+  file: File,
+  sessionToken?: string
+): Promise<{ classes: ClassBlock[]; skipped: number }> {
+  const image = await encodeImage(file)
+
+  let response: Response
+  try {
+    response = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'content-type': 'application/json',
+        ...(sessionToken ? { 'x-taggongsa-session': sessionToken } : {}),
+      },
+      body: JSON.stringify(image),
+    })
+  } catch {
+    throw new TimetableAiError('network')
+  }
+
+  const body = (await response.json().catch(() => null)) as {
+    classes?: ServerClass[]
+    skipped?: number
+    error?: string
+  } | null
+
+  if (!response.ok || !body?.classes) {
+    throw new TimetableAiError(body?.error ?? 'failed')
+  }
+
+  return {
+    classes: body.classes.map((item) => ({
+      id: uid('c'),
+      name: item.name,
+      day: item.day,
+      start: item.start,
+      end: item.end,
+      place: item.room,
+    })),
+    skipped: body.skipped ?? 0,
+  }
 }

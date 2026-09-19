@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useApp, useMe, useNav } from '../store/context'
 import { DEFAULT_CLOCK, ME } from '../store/state'
-import { ROLE_LABEL } from '../data/labels'
+import { CAMPUS_LABEL, ROLE_LABEL } from '../data/labels'
 import type { ClockSetting } from '../types'
 import { cx } from '../lib/cx'
 import {
@@ -231,8 +231,8 @@ function LogoutSheet({ onClose }: { onClose: () => void }) {
       }
     >
       <p className="tg-body">
-        데모 버전은 이 기기에만 기록을 저장해요. 로그아웃하면 은행잎, 시간표,
-        미션 기록이 처음 상태로 돌아가요.
+        기록은 이 기기에 계정별로 저장돼요. 같은 별명으로 다시 로그인하면
+        은행잎, 시간표, 튜토리얼 기록을 이어서 쓸 수 있어요.
       </p>
     </Sheet>
   )
@@ -247,7 +247,7 @@ export function MyPage() {
 
   const free = getFreeState(me.timetable, now)
   const copy = describeFree(free, now)
-  const doneSteps = state.tutorial.done.filter(Boolean).length
+  const basicDone = [1, 2, 3].filter((step) => state.tutorial.done[step]).length
   const approved = state.submissions.filter(
     (s) => s.userId === ME && s.status === 'approved'
   ).length
@@ -267,37 +267,33 @@ export function MyPage() {
               <h1 className="tg-h2">{me.nickname}</h1>
               <RoleChip role={me.role} />
             </div>
-            <p className="tg-caption">{me.department}</p>
+            <p className="tg-caption">
+              {CAMPUS_LABEL[me.campus]} · {me.department}
+            </p>
           </div>
         </div>
         <hr
           className="tg-divider"
           style={{ margin: '14px 0' }}
         />
-        <div className="tg-grid2">
-          {me.role === 'fresh' ? (
-            <>
-              <div>
-                <p className="tg-caption">튜토리얼</p>
-                <p className="tg-h3">{doneSteps}/4단계</p>
-              </div>
-              <div>
-                <p className="tg-caption">완료한 자유 미션</p>
-                <p className="tg-h3">{approved}개</p>
-              </div>
-            </>
-          ) : (
-            <>
-              <div>
-                <p className="tg-caption">만든 미션</p>
-                <p className="tg-h3">{madeMissions}개</p>
-              </div>
-              <div>
-                <p className="tg-caption">확인한 인증</p>
-                <p className="tg-h3">{reviewed}건</p>
-              </div>
-            </>
-          )}
+        <div className="tg-stack tg-stack--sm">
+          {(me.role === 'fresh'
+            ? [
+                ['기본 튜토리얼', `${basicDone}/3단계`],
+                ['추가 튜토리얼', `${approved}개`],
+              ]
+            : [
+                ['만든 미션', `${madeMissions}개`],
+                ['확인한 인증', `${reviewed}건`],
+              ]
+          ).map(([label, value]) => (
+            <p
+              key={label}
+              className="tg-stat"
+            >
+              {label}: <b>{value}</b>
+            </p>
+          ))}
         </div>
         {state.tutorial.gradCredits && (
           <p

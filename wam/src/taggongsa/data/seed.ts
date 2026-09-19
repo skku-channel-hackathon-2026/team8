@@ -7,6 +7,7 @@ import type {
   Submission,
   Task,
 } from '../types'
+import { DEPARTMENTS_BY_CAMPUS } from './departments'
 
 /**
  * 데모용 초기 데이터. 서버와 DB가 붙기 전까지 다른 학생·미션·모임·마켓 요청을 대신한다.
@@ -48,7 +49,10 @@ function student(
   timetable: ClassBlock[],
   showFree = true
 ): Student {
-  return { id, nickname, department, role, tone, timetable, showFree }
+  const campus = DEPARTMENTS_BY_CAMPUS.natural.includes(department)
+    ? 'natural'
+    : 'humanities'
+  return { id, nickname, department, campus, role, tone, timetable, showFree }
 }
 
 export function buildSeed(base = Date.now()) {
@@ -65,10 +69,10 @@ export function buildSeed(base = Date.now()) {
       c('영어회화', 4, '10:30', '12:15', '퇴계인문관 31207'),
     ]),
     student('s2', '와플', '소프트웨어학과', 'fresh', 1, [
-      c('프로그래밍기초', 0, '09:00', '10:45', '국제관 9B310'),
-      c('이산수학', 2, '16:30', '17:45', '국제관 9B312'),
-      c('이산수학', 4, '16:30', '17:45', '국제관 9B312'),
-      c('성균인성', 1, '13:30', '15:15', '600주년기념관 9B107'),
+      c('프로그래밍기초', 0, '09:00', '10:45', '제2공학관 27312'),
+      c('이산수학', 2, '16:30', '17:45', '제2공학관 27315'),
+      c('이산수학', 4, '16:30', '17:45', '제2공학관 27315'),
+      c('성균인성', 1, '13:30', '15:15', '제1공학관 21101'),
     ]),
     student('s3', '도토리', '사회학과', 'fresh', 2, [
       c('사회학개론', 0, '09:00', '10:15', '수선관 61102'),

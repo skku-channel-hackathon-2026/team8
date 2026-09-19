@@ -503,8 +503,8 @@ function MyRequest({ task }: { task: Task }) {
 export function MarketScreen() {
   const { state, now } = useApp()
   const me = useMe()
-  const { hint } = useNav()
-  const [mode, setMode] = useState<Mode>(hint === 'buy' ? 'buy' : 'sell')
+
+  const [mode, setMode] = useState<Mode>('sell')
   const [fitOnly, setFitOnly] = useState(false)
   const [taking, setTaking] = useState<Task | null>(null)
   const [postOpen, setPostOpen] = useState(false)
@@ -539,7 +539,6 @@ export function MarketScreen() {
   return (
     <div className="tg-stack tg-stack--lg">
       <div className="tg-stack tg-stack--sm">
-        <h1 className="tg-h1">공강 마켓</h1>
         <p className="tg-body">
           바쁜 사람은 은행잎으로 공강을 사고, 시간이 남는 사람은 공강을 팔아
           은행잎을 벌어요.

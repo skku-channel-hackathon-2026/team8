@@ -45,6 +45,8 @@ export const TutorialWamArgsSchema = z.object({
   managerId: z.string(),
   message: z.string(),
   targetToken: z.string().optional(),
+  // 타공사 WAM이 서버의 AI 기능을 부를 때 쓰는 서명 토큰
+  sessionToken: z.string().optional(),
 });
 
 export type TutorialWamArgs = z.infer<typeof TutorialWamArgsSchema>;
