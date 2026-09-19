@@ -514,7 +514,7 @@ function FreshMissionBoard({ unlocked }: { unlocked: boolean }) {
             size={22}
           />
           <div className="tg-grow">
-            <p className="tg-strong">자유 미션은 3단계 뒤에 열려요</p>
+            <p className="tg-strong">추가 튜토리얼은 3단계 뒤에 열려요</p>
             <p className="tg-caption">
               헌내기 선배들이 만든 미션 {state.missions.length}개가 기다리고
               있어요
@@ -528,7 +528,7 @@ function FreshMissionBoard({ unlocked }: { unlocked: boolean }) {
   return (
     <div className="tg-stack">
       <SectionHead
-        title="자유 미션"
+        title="추가 튜토리얼"
         caption={`원하는 미션을 골라 도전해요 · 완료 ${doneCount}개`}
       />
       <div className="tg-chips">
@@ -943,7 +943,7 @@ export function TutorialScreen() {
   const isFresh = me.role === 'fresh'
   const steps: StepId[] = isFresh ? [0, 1, 2, 3] : [0]
   const current = steps.find((s) => !done[s])
-  const completed = steps.filter((s) => done[s]).length
+  const basicDone = [1, 2, 3].filter((s) => done[s]).length
   const boardUnlocked = done[1] && done[2] && done[3]
 
   const statusOf = (step: StepId): 'done' | 'current' | 'locked' =>
@@ -1020,23 +1020,24 @@ export function TutorialScreen() {
         </h1>
         <p className="tg-body">
           {isFresh
-            ? '단계를 순서대로 마치면 은행잎을 받고, 3단계 뒤에는 선배들이 만든 자유 미션이 열려요.'
+            ? '0단계로 시간표를 올리고 1~3단계 기본 튜토리얼을 마치면, 선배들이 만든 추가 튜토리얼이 열려요.'
             : '헌내기는 시간표만 올리면 돼요. 그다음엔 미션을 만들고 새내기의 인증을 확인해 주세요.'}
         </p>
-        <div
-          className="tg-row"
-          style={{ marginTop: 4 }}
-        >
-          <div className="tg-grow">
-            <Progress
-              value={completed}
-              max={steps.length}
-            />
+        {isFresh && (
+          <div
+            className="tg-row"
+            style={{ marginTop: 4 }}
+          >
+            <span className="tg-caption tg-strong">기본 튜토리얼</span>
+            <div className="tg-grow">
+              <Progress
+                value={basicDone}
+                max={3}
+              />
+            </div>
+            <span className="tg-caption tg-strong">{basicDone}/3단계</span>
           </div>
-          <span className="tg-caption tg-strong">
-            {completed}/{steps.length}
-          </span>
-        </div>
+        )}
       </div>
 
       <div className="tg-steps">

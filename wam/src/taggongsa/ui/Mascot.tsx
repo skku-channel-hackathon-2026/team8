@@ -147,29 +147,3 @@ export function Leaf({ size = 16 }: { size?: number }) {
     </svg>
   )
 }
-
-export function Sparkle({
-  size = 18,
-  className,
-}: {
-  size?: number
-  className?: string
-}) {
-  return (
-    <svg
-      className={className}
-      width={size}
-      height={size}
-      viewBox="0 0 24 24"
-      aria-hidden="true"
-    >
-      <path
-        d="M12 2c.7 5.2 3 7.5 8.2 8.2-5.2.7-7.5 3-8.2 8.2-.7-5.2-3-7.5-8.2-8.2C9 9.5 11.3 7.2 12 2Z"
-        fill="var(--tg-ginkgo)"
-        stroke="#1f1b16"
-        strokeWidth="1.5"
-        strokeLinejoin="round"
-      />
-    </svg>
-  )
-}

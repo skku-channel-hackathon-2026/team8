@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { useWamData } from '@channel.io/app-sdk-wam'
 import { useApp, useMe } from '../store/context'
 import type { ClassBlock, Moment } from '../types'
 import { cx } from '../lib/cx'
@@ -12,11 +13,16 @@ import {
   getFreeState,
   parseHM,
 } from '../lib/time'
-import { recognizeTimetable } from '../lib/timetableAi'
+import {
+  TimetableAiError,
+  aiErrorMessage,
+  recognizeTimetable,
+} from '../lib/timetableAi'
 import { Icon } from '../ui/Icon'
 import {
   Button,
   CheckRow,
+  IconButton,
   Empty,
   Field,
   Sheet,
@@ -131,10 +137,13 @@ function blockLabel(block: ClassBlock): string {
 export function AiUploadSheet({ onClose }: { onClose: () => void }) {
   const { dispatch } = useApp()
   const me = useMe()
+  const sessionToken = useWamData('sessionToken')
   const [preview, setPreview] = useState<string | null>(null)
   const [phase, setPhase] = useState<'pick' | 'scanning' | 'result'>('pick')
   const [found, setFound] = useState<ClassBlock[]>([])
+  const [skipped, setSkipped] = useState(0)
   const [excluded, setExcluded] = useState<Set<string>>(new Set())
+  const [editing, setEditing] = useState<ClassBlock | null>(null)
   const [error, setError] = useState('')
 
   useEffect(() => {
@@ -153,12 +162,21 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
     setPreview(URL.createObjectURL(file))
     setPhase('scanning')
     try {
-      const blocks = await recognizeTimetable(file)
-      setFound(blocks)
+      const result = await recognizeTimetable(
+        file,
+        typeof sessionToken === 'string' ? sessionToken : undefined
+      )
+      setFound(result.classes)
+      setSkipped(result.skipped)
       setExcluded(new Set())
       setPhase('result')
-    } catch {
-      setError('시간표를 읽지 못했어요. 다른 이미지로 다시 시도해 주세요')
+    } catch (caught) {
+      setError(
+        aiErrorMessage(
+          caught instanceof TimetableAiError ? caught.code : 'failed'
+        )
+      )
+      setPreview(null)
       setPhase('pick')
     }
   }
@@ -176,6 +194,24 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
   const save = () => {
     dispatch({ type: 'SET_TIMETABLE', blocks: selected })
     onClose()
+  }
+
+  if (editing) {
+    return (
+      <ClassSheet
+        initial={editing}
+        others={found}
+        onSave={(block) => {
+          setFound((prev) => prev.map((b) => (b.id === block.id ? block : b)))
+          setEditing(null)
+        }}
+        onDelete={() => {
+          setFound((prev) => prev.filter((b) => b.id !== editing.id))
+          setEditing(null)
+        }}
+        onClose={() => setEditing(null)}
+      />
+    )
   }
 
   return (
@@ -210,8 +246,8 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
         {phase === 'pick' && (
           <>
             <p className="tg-body">
-              에브리타임이나 GLS 시간표 화면을 캡처해서 올려주세요. AI가 과목,
-              요일, 시간, 강의실을 읽어 공강 시간을 계산해요.
+              에브리타임, GLS, 킹고엠의 시간표 화면을 캡처해서 올려주세요. AI가
+              수업 칸에 적힌 과목명, 강의실, 시간을 그대로 읽어 와요.
             </p>
             <label className="tg-dropzone">
               <Icon
@@ -223,17 +259,25 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
               <input
                 type="file"
                 accept="image/*"
-                onChange={(event) => void onFile(event.target.files?.[0])}
+                onChange={(event) => {
+                  void onFile(event.target.files?.[0])
+                  event.target.value = ''
+                }}
               />
             </label>
             {error && (
-              <p
-                className="tg-hint"
-                style={{ color: 'var(--tg-heart)' }}
-              >
+              <div className="tg-banner tg-banner--error">
+                <Icon
+                  name="bell"
+                  size={16}
+                />
                 {error}
-              </p>
+              </div>
             )}
+            <p className="tg-caption">
+              잘 읽히는 이미지: 시간표 전체가 한 화면에 보이고, 과목명과 강의실
+              글자가 잘리지 않은 캡처
+            </p>
             {me.timetable.length > 0 && (
               <div className="tg-banner">
                 <Icon
@@ -264,7 +308,8 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
               <p className="tg-strong">AI가 시간표를 읽고 있어요…</p>
             </div>
             <p className="tg-caption">
-              과목명, 요일, 시간, 강의실을 찾는 중이에요.
+              과목명, 요일, 시간, 강의실을 한 칸씩 옮겨 적는 중이에요. 30초에서
+              1분 정도 걸려요.
             </p>
           </>
         )}
@@ -277,32 +322,42 @@ export function AiUploadSheet({ onClose }: { onClose: () => void }) {
                 size={16}
               />
               <span>
-                <b>{found.length}개 수업</b>을 찾았어요. 잘못 읽은 수업은 체크를
-                풀어 주세요.
+                <b>{found.length}개 수업</b>을 읽었어요. 틀린 곳은 연필 버튼으로
+                고치고, 필요 없는 수업은 체크를 풀어 주세요.
               </span>
             </div>
+            {skipped > 0 && (
+              <p className="tg-caption">
+                시간을 알아보기 어렵거나 주말에 있는 칸 {skipped}개는 뺐어요.
+                필요하면 저장 후 직접 추가해 주세요.
+              </p>
+            )}
             <div className="tg-list">
               {found.map((block) => (
-                <CheckRow
+                <div
                   key={block.id}
-                  checked={!excluded.has(block.id)}
-                  onToggle={() => toggle(block.id)}
-                  aside={<span className="tg-caption">{block.place}</span>}
+                  className="tg-editrow"
                 >
-                  {block.name}
-                  <span
-                    className="tg-caption"
-                    style={{ display: 'block', textDecoration: 'none' }}
+                  <CheckRow
+                    checked={!excluded.has(block.id)}
+                    onToggle={() => toggle(block.id)}
                   >
-                    {blockLabel(block)}
-                  </span>
-                </CheckRow>
+                    {block.name}
+                    <span
+                      className="tg-caption"
+                      style={{ display: 'block' }}
+                    >
+                      {blockLabel(block)} · {block.place || '강의실 없음'}
+                    </span>
+                  </CheckRow>
+                  <IconButton
+                    icon="edit"
+                    label={`${block.name} 고치기`}
+                    onClick={() => setEditing(block)}
+                  />
+                </div>
               ))}
             </div>
-            <p className="tg-caption">
-              데모 버전은 예시 시간표를 돌려줘요. 서버에 AI 인식 기능을 연결하면
-              실제 이미지를 읽어요.
-            </p>
           </>
         )}
       </div>

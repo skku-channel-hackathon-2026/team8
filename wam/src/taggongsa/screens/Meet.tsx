@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { useApp, useMe, useNav } from '../store/context'
 import { ME, findPerson } from '../store/state'
-import { THEME_HINT, THEME_LABEL } from '../data/labels'
+import { CAMPUS_SHORT, THEME_HINT, THEME_LABEL } from '../data/labels'
 import type {
   ClassBlock,
   MeetRequest,
@@ -175,7 +175,9 @@ function DmSheet({
                 <span className="tg-h3">{target.nickname}</span>
                 <RoleChip role={target.role} />
               </div>
-              <p className="tg-caption">{target.department}</p>
+              <p className="tg-caption">
+                {CAMPUS_SHORT[target.campus]} · {target.department}
+              </p>
               <FreeLine
                 person={target}
                 now={now}
@@ -469,8 +471,8 @@ type Filter = 'all' | 'fresh' | 'senior'
 export function MeetScreen() {
   const { state, now, dispatch } = useApp()
   const me = useMe()
-  const { hint, push } = useNav()
-  const [mode, setMode] = useState<'room' | 'dm'>(hint === 'dm' ? 'dm' : 'room')
+  const { push } = useNav()
+  const [mode, setMode] = useState<'room' | 'dm'>('room')
   const [filter, setFilter] = useState<Filter>('all')
   const [dmTarget, setDmTarget] = useState<Student | null>(null)
   const [createOpen, setCreateOpen] = useState(false)
@@ -502,7 +504,6 @@ export function MeetScreen() {
   return (
     <div className="tg-stack tg-stack--lg">
       <div className="tg-stack tg-stack--sm">
-        <h1 className="tg-h1">너 지금 공강이야?</h1>
         <p className="tg-body">
           공강이 겹치는 학생과 오락이나 스터디를 함께해요. 모임방에 모이거나
           1대1로 신청할 수 있어요.
@@ -637,7 +638,9 @@ export function MeetScreen() {
                         {student.nickname}
                         <RoleChip role={student.role} />
                       </div>
-                      <p className="tg-person__meta">{student.department}</p>
+                      <p className="tg-person__meta">
+                        {CAMPUS_SHORT[student.campus]} · {student.department}
+                      </p>
                       <FreeLine
                         person={student}
                         now={now}
@@ -798,7 +801,9 @@ export function RoomScreen({ roomId }: { roomId: string }) {
                   <RoleChip role={person.role} />
                   {person.id === room.hostId && <Chip tone="ink">방장</Chip>}
                 </div>
-                <p className="tg-person__meta">{person.department}</p>
+                <p className="tg-person__meta">
+                  {CAMPUS_SHORT[person.campus]} · {person.department}
+                </p>
               </div>
             </div>
           ))}

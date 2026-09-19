@@ -1,91 +1,196 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { useApp } from '../store/context'
-import { DEPARTMENTS } from '../data/departments'
-import { REWARDS, ROLE_LABEL } from '../data/labels'
-import type { Role } from '../types'
+import type { AppState } from '../store/state'
+import { DEPARTMENTS_BY_CAMPUS } from '../data/departments'
+import {
+  CAMPUS_LABEL,
+  CAMPUS_PLACE,
+  CAMPUS_SHORT,
+  ROLE_LABEL,
+} from '../data/labels'
+import type { Campus, Role } from '../types'
+import { loadAccounts } from '../lib/storage'
 import { Icon } from '../ui/Icon'
-import { Leaf, Mascot, Sparkle } from '../ui/Mascot'
-import { Avatar, Button, Card, Chip, RoleChip } from '../ui/primitives'
+import { Leaf, Mascot } from '../ui/Mascot'
+import { Avatar, Button, Card, RoleChip } from '../ui/primitives'
 
-export function Welcome({ onStart }: { onStart: () => void }) {
+export function Welcome({
+  onLogin,
+  onSignup,
+}: {
+  onLogin: () => void
+  onSignup: () => void
+}) {
+  return (
+    <div className="tg-welcome">
+      <div
+        className="tg-welcome__logo"
+        role="img"
+        aria-label="타공사"
+      >
+        <Leaf size={84} />
+        <span>타공사</span>
+      </div>
+      <div className="tg-welcome__actions">
+        <Button
+          block
+          onClick={onLogin}
+        >
+          로그인
+        </Button>
+        <Button
+          block
+          variant="outline"
+          onClick={onSignup}
+        >
+          회원가입
+        </Button>
+      </div>
+    </div>
+  )
+}
+
+function BackRow({
+  onBack,
+  children,
+}: {
+  onBack: () => void
+  children?: ReactNode
+}) {
+  return (
+    <div className="tg-row">
+      <button
+        type="button"
+        className="tg-iconbtn"
+        aria-label="이전"
+        onClick={onBack}
+        style={{ marginLeft: -8 }}
+      >
+        <Icon name="back" />
+      </button>
+      {children}
+    </div>
+  )
+}
+
+export function Login({
+  onBack,
+  onSignup,
+}: {
+  onBack: () => void
+  onSignup: () => void
+}) {
+  const { dispatch } = useApp()
+  const accounts = useMemo(() => loadAccounts<AppState>(), [])
+  const saved = Object.values(accounts).filter(
+    (account) => account.version === 2 && account.profile
+  )
+  const [nickname, setNickname] = useState('')
+  const [error, setError] = useState('')
+
+  const login = (name: string) => {
+    const account = accounts[name.trim()]
+    if (!account || account.version !== 2 || !account.profile) {
+      setError(`'${name.trim()}' 별명으로 가입한 계정이 이 기기에 없어요.`)
+      return
+    }
+    dispatch({ type: 'LOAD_ACCOUNT', state: account })
+  }
+
   return (
     <>
       <div className="tg-scroll">
         <div className="tg-stack tg-stack--lg">
-          <div className="tg-hero">
-            <Sparkle
-              className="tg-hero__spark"
-              size={20}
-            />
-            <Mascot
-              className="tg-hero__leaf tg-hero__leaf--l"
-              size={92}
-              color="green"
-              mood="wink"
-            />
-            <Mascot
-              className="tg-hero__leaf"
-              size={128}
-              color="gold"
-            />
-            <Mascot
-              className="tg-hero__leaf tg-hero__leaf--r"
-              size={92}
-              color="orange"
-              mood="wow"
-            />
-            <span className="tg-hero__ground" />
+          <div className="tg-stack tg-stack--sm">
+            <BackRow onBack={onBack} />
+            <h1 className="tg-h1">다시 만나서 반가워요</h1>
+            <p className="tg-body">가입할 때 정한 별명으로 로그인해요.</p>
           </div>
 
-          <div
-            className="tg-stack tg-stack--sm"
-            style={{ textAlign: 'center' }}
-          >
-            <p className="tg-caption tg-strong">타인의 공강을 사자</p>
-            <h1 className="tg-display">
-              빈 시간이
-              <br />
-              서로를 돕는 시간으로
-            </h1>
-            <p className="tg-body">
-              새내기의 첫 학기 적응부터 선후배가 서로의 공강을 나누는 일까지,
-              성균관대 학생을 위한 공강 플랫폼이에요.
-            </p>
-          </div>
-
-          <div
-            className="tg-chips"
-            style={{ justifyContent: 'center' }}
-          >
-            <Chip icon="flag">새내기 튜토리얼</Chip>
-            <Chip icon="people">공강 친구 찾기</Chip>
-            <Chip icon="bag">공강 마켓</Chip>
-          </div>
-
-          <Card
-            stack
-            tone="gold"
-          >
-            <div className="tg-row">
-              <Leaf size={36} />
-              <div className="tg-grow">
-                <p className="tg-strong">
-                  가입하면 은행잎 {REWARDS.signup}잎을 드려요
-                </p>
-                <p className="tg-caption">
-                  은행잎은 미션 보상과 공강 마켓에서 쓰는 포인트예요
-                </p>
+          {saved.length > 0 && (
+            <div className="tg-stack tg-stack--sm">
+              <p className="tg-label">이 기기에서 쓴 계정</p>
+              <div className="tg-list">
+                {saved.map((account) => {
+                  const profile = account.profile
+                  if (!profile) return null
+                  return (
+                    <button
+                      key={profile.nickname}
+                      type="button"
+                      className="tg-listitem tg-checkrow"
+                      onClick={() => login(profile.nickname)}
+                    >
+                      <Avatar person={profile} />
+                      <span className="tg-grow">
+                        <span className="tg-row">
+                          <span className="tg-strong">{profile.nickname}</span>
+                          <RoleChip role={profile.role} />
+                        </span>
+                        <span
+                          className="tg-caption"
+                          style={{ display: 'block' }}
+                        >
+                          {CAMPUS_SHORT[profile.campus]} · {profile.department}
+                        </span>
+                      </span>
+                      <Icon
+                        name="chevron"
+                        size={16}
+                      />
+                    </button>
+                  )
+                })}
               </div>
             </div>
-          </Card>
+          )}
+
+          <div className="tg-field">
+            <label
+              className="tg-label"
+              htmlFor="tg-login-nick"
+            >
+              별명으로 로그인
+            </label>
+            <input
+              id="tg-login-nick"
+              className="tg-input"
+              placeholder="가입할 때 정한 별명"
+              value={nickname}
+              maxLength={10}
+              onChange={(event) => {
+                setNickname(event.target.value)
+                setError('')
+              }}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' && nickname.trim()) login(nickname)
+              }}
+            />
+            {error && (
+              <p
+                className="tg-hint"
+                style={{ color: 'var(--tg-heart)' }}
+              >
+                {error}{' '}
+                <button
+                  type="button"
+                  className="tg-linkbtn"
+                  onClick={onSignup}
+                >
+                  회원가입하기
+                </button>
+              </p>
+            )}
+          </div>
         </div>
       </div>
       <div className="tg-footer-cta">
         <Button
           block
-          onClick={onStart}
+          disabled={nickname.trim().length < 2}
+          onClick={() => login(nickname)}
         >
-          로그인 / 회원가입
+          로그인
         </Button>
       </div>
     </>
@@ -105,32 +210,42 @@ const ROLE_OPTIONS: Array<{ role: Role; title: string; body: string }> = [
   },
 ]
 
+const CAMPUSES: Campus[] = ['humanities', 'natural']
 const NICK_MAX = 10
 
 export function Signup({ onBack }: { onBack: () => void }) {
   const { dispatch } = useApp()
   const [step, setStep] = useState(0)
   const [role, setRole] = useState<Role | null>(null)
+  const [campus, setCampus] = useState<Campus | null>(null)
   const [department, setDepartment] = useState('')
   const [query, setQuery] = useState('')
   const [nickname, setNickname] = useState('')
 
   const filtered = useMemo(() => {
+    if (!campus) return []
     const q = query.trim()
-    return q ? DEPARTMENTS.filter((d) => d.includes(q)) : DEPARTMENTS
-  }, [query])
+    const list = DEPARTMENTS_BY_CAMPUS[campus]
+    return q ? list.filter((d) => d.includes(q)) : list
+  }, [campus, query])
 
   const trimmedNick = nickname.trim()
+  const taken = useMemo(
+    () => trimmedNick !== '' && trimmedNick in loadAccounts(),
+    [trimmedNick]
+  )
   const nickError =
     trimmedNick.length > 0 && trimmedNick.length < 2
       ? '별명은 2자 이상으로 지어주세요'
-      : ''
+      : taken
+        ? '이 기기에서 이미 쓰는 별명이에요. 다른 별명을 쓰거나 로그인해 주세요.'
+        : ''
   const canNext =
     step === 0
       ? role !== null
       : step === 1
-        ? department !== ''
-        : trimmedNick.length >= 2
+        ? campus !== null && department !== ''
+        : trimmedNick.length >= 2 && !taken
 
   const goBack = () => (step === 0 ? onBack() : setStep(step - 1))
   const goNext = () => {
@@ -139,9 +254,21 @@ export function Signup({ onBack }: { onBack: () => void }) {
       setStep(step + 1)
       return
     }
-    if (role) {
-      dispatch({ type: 'SIGN_UP', role, department, nickname: trimmedNick })
+    if (role && campus) {
+      dispatch({
+        type: 'SIGN_UP',
+        role,
+        campus,
+        department,
+        nickname: trimmedNick,
+      })
     }
+  }
+
+  const chooseCampus = (next: Campus) => {
+    setCampus(next)
+    setQuery('')
+    if (!DEPARTMENTS_BY_CAMPUS[next].includes(department)) setDepartment('')
   }
 
   const customDept = query.trim()
@@ -152,16 +279,7 @@ export function Signup({ onBack }: { onBack: () => void }) {
       <div className="tg-scroll">
         <div className="tg-stack tg-stack--lg">
           <div className="tg-stack tg-stack--sm">
-            <div className="tg-row">
-              <button
-                type="button"
-                className="tg-iconbtn"
-                aria-label="이전"
-                onClick={goBack}
-                style={{ marginLeft: -8 }}
-              >
-                <Icon name="back" />
-              </button>
+            <BackRow onBack={goBack}>
               <div
                 className="tg-onboard-progress tg-grow"
                 aria-label={`3단계 중 ${step + 1}단계`}
@@ -173,19 +291,19 @@ export function Signup({ onBack }: { onBack: () => void }) {
                   />
                 ))}
               </div>
-            </div>
+            </BackRow>
             <p className="tg-caption tg-strong">회원가입 {step + 1}/3</p>
             <h1 className="tg-h1">
               {step === 0 && '먼저, 어떤 학생인가요?'}
-              {step === 1 && '학과를 알려주세요'}
+              {step === 1 && '캠퍼스와 학과를 알려주세요'}
               {step === 2 && '어떻게 불러드릴까요?'}
             </h1>
             <p className="tg-body">
               {step === 0 &&
                 '선택에 따라 튜토리얼에서 할 수 있는 일이 달라져요.'}
-              {step === 1 && '같은 학과 선후배를 찾을 때 쓰여요.'}
+              {step === 1 && '같은 캠퍼스, 같은 학과 선후배를 찾을 때 쓰여요.'}
               {step === 2 &&
-                '다른 학생들에게 보여질 이름이에요. 실명이 아니어도 괜찮아요.'}
+                '다른 학생들에게 보여질 이름이에요. 로그인할 때도 이 별명을 써요.'}
             </p>
           </div>
 
@@ -210,10 +328,8 @@ export function Signup({ onBack }: { onBack: () => void }) {
                     mood={option.role === 'fresh' ? 'wow' : 'smile'}
                   />
                   <span className="tg-grow">
-                    <span className="tg-row">
-                      <span className="tg-choice__title">
-                        {ROLE_LABEL[option.role]}
-                      </span>
+                    <span className="tg-choice__title">
+                      {ROLE_LABEL[option.role]}
                     </span>
                     <span
                       className="tg-choice__body"
@@ -230,73 +346,110 @@ export function Signup({ onBack }: { onBack: () => void }) {
           )}
 
           {step === 1 && (
-            <div className="tg-stack tg-stack--sm">
-              <div className="tg-inputwrap">
-                <Icon
-                  name="search"
-                  size={18}
-                />
-                <input
-                  className="tg-input"
-                  placeholder="학과 이름으로 검색"
-                  value={query}
-                  onChange={(event) => setQuery(event.target.value)}
-                  aria-label="학과 검색"
-                />
+            <div className="tg-stack">
+              <div className="tg-field">
+                <span className="tg-label">소속 캠퍼스</span>
+                <div
+                  className="tg-campus-pick"
+                  role="radiogroup"
+                  aria-label="소속 캠퍼스"
+                >
+                  {CAMPUSES.map((value) => (
+                    <button
+                      key={value}
+                      type="button"
+                      role="radio"
+                      aria-checked={campus === value}
+                      className="tg-choice"
+                      onClick={() => chooseCampus(value)}
+                    >
+                      <span>
+                        <span className="tg-choice__title">
+                          {CAMPUS_LABEL[value]}
+                        </span>
+                        <span
+                          className="tg-choice__body"
+                          style={{ display: 'block' }}
+                        >
+                          {CAMPUS_PLACE[value]}
+                        </span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
               </div>
-              <div
-                className="tg-deptlist"
-                role="listbox"
-                aria-label="학과 목록"
-              >
-                {showCustom && (
-                  <button
-                    type="button"
-                    role="option"
-                    aria-selected={department === customDept}
-                    className="tg-deptitem"
-                    onClick={() => setDepartment(customDept)}
-                  >
-                    <span>&lsquo;{customDept}&rsquo; 직접 입력</span>
+
+              {campus && (
+                <div className="tg-field">
+                  <span className="tg-label">학과</span>
+                  <div className="tg-inputwrap">
                     <Icon
-                      name="plus"
-                      size={16}
+                      name="search"
+                      size={18}
                     />
-                  </button>
-                )}
-                {filtered.map((dept) => (
-                  <button
-                    key={dept}
-                    type="button"
-                    role="option"
-                    aria-selected={department === dept}
-                    className="tg-deptitem"
-                    onClick={() => setDepartment(dept)}
+                    <input
+                      className="tg-input"
+                      placeholder={`${CAMPUS_SHORT[campus]} 학과 검색`}
+                      value={query}
+                      onChange={(event) => setQuery(event.target.value)}
+                      aria-label="학과 검색"
+                    />
+                  </div>
+                  <div
+                    className="tg-deptlist"
+                    role="listbox"
+                    aria-label="학과 목록"
                   >
-                    <span>{dept}</span>
-                    {department === dept && (
-                      <Icon
-                        name="check"
-                        size={16}
-                        strokeWidth={2.6}
-                      />
+                    {showCustom && (
+                      <button
+                        type="button"
+                        role="option"
+                        aria-selected={department === customDept}
+                        className="tg-deptitem"
+                        onClick={() => setDepartment(customDept)}
+                      >
+                        <span>&lsquo;{customDept}&rsquo; 직접 입력</span>
+                        <Icon
+                          name="plus"
+                          size={16}
+                        />
+                      </button>
                     )}
-                  </button>
-                ))}
-                {filtered.length === 0 && !showCustom && (
-                  <p
-                    className="tg-caption"
-                    style={{ padding: 14 }}
-                  >
-                    검색 결과가 없어요. 두 글자 이상 입력하면 직접 추가할 수
-                    있어요.
-                  </p>
-                )}
-              </div>
+                    {filtered.map((dept) => (
+                      <button
+                        key={dept}
+                        type="button"
+                        role="option"
+                        aria-selected={department === dept}
+                        className="tg-deptitem"
+                        onClick={() => setDepartment(dept)}
+                      >
+                        <span>{dept}</span>
+                        {department === dept && (
+                          <Icon
+                            name="check"
+                            size={16}
+                            strokeWidth={2.6}
+                          />
+                        )}
+                      </button>
+                    ))}
+                    {filtered.length === 0 && !showCustom && (
+                      <p
+                        className="tg-caption"
+                        style={{ padding: 14 }}
+                      >
+                        검색 결과가 없어요. 두 글자 이상 입력하면 직접 추가할 수
+                        있어요.
+                      </p>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
           )}
 
-          {step === 2 && role && (
+          {step === 2 && role && campus && (
             <div className="tg-stack">
               <div className="tg-inputwrap">
                 <input
@@ -342,7 +495,9 @@ export function Signup({ onBack }: { onBack: () => void }) {
                       <span className="tg-h3">{trimmedNick || '별명'}</span>
                       <RoleChip role={role} />
                     </div>
-                    <p className="tg-caption">{department}</p>
+                    <p className="tg-caption">
+                      {CAMPUS_SHORT[campus]} · {department}
+                    </p>
                   </div>
                 </div>
               </Card>

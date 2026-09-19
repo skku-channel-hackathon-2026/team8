@@ -1,4 +1,5 @@
 export type Role = 'fresh' | 'senior'
+export type Campus = 'humanities' | 'natural'
 export type MeetTheme = 'play' | 'study'
 export type StepId = 0 | 1 | 2 | 3
 
@@ -16,6 +17,7 @@ export interface Student {
   id: string
   nickname: string
   department: string
+  campus: Campus
   role: Role
   timetable: ClassBlock[]
   showFree: boolean

@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useReducer, useState, type ReactNode } from 'react'
-import { loadSaved, save } from '../lib/storage'
+import { loadSaved, save, saveAccount } from '../lib/storage'
 import { momentFromDate } from '../lib/time'
 import { AppContext } from './context'
 import { createInitialState, reducer, type AppState } from './state'
@@ -7,7 +7,7 @@ import { createInitialState, reducer, type AppState } from './state'
 function loadInitial(): AppState {
   const initial = createInitialState()
   const saved = loadSaved<AppState>()
-  if (!saved || saved.version !== 1) return initial
+  if (!saved || saved.version !== 2) return initial
   return { ...initial, ...saved, toasts: [] }
 }
 
@@ -16,7 +16,9 @@ export function AppProvider({ children }: { children: ReactNode }) {
   const [realNow, setRealNow] = useState(() => new Date())
 
   useEffect(() => {
-    save({ ...state, toasts: [] })
+    const snapshot = { ...state, toasts: [] }
+    save(snapshot)
+    if (state.profile) saveAccount(state.profile.nickname, snapshot)
   }, [state])
 
   // 인증 승인·초대 수락 같은 데모 응답을 시간에 맞춰 처리한다.

@@ -24,20 +24,19 @@ export function useMe(): Profile {
   return me
 }
 
-export type TabId = 'home' | 'meet' | 'market' | 'my'
-
+/** 첫 화면의 메뉴 버튼으로 여는 화면과, 그 안에서 이어지는 화면 */
 export type Route =
   | { name: 'tutorial' }
+  | { name: 'meet' }
+  | { name: 'market' }
+  | { name: 'my' }
   | { name: 'timetable' }
   | { name: 'room'; roomId: string }
 
 export type GlobalSheet = 'charge' | 'clock' | null
 
 export interface NavValue {
-  tab: TabId
-  hint: string | null
   stack: Route[]
-  goTab: (tab: TabId, hint?: string) => void
   push: (route: Route) => void
   back: () => void
   openSheet: (sheet: GlobalSheet) => void

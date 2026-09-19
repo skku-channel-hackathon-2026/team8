@@ -15,11 +15,12 @@
   "author": "",
   "license": "ISC",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.126.0",
     "@channel.io/app-sdk-server": "0.17.2",
-    "@tutorial/shared": "workspace:*",
     "@nestjs/common": "11.1.28",
     "@nestjs/core": "11.1.28",
     "@nestjs/platform-express": "11.1.28",
+    "@tutorial/shared": "workspace:*",
     "dotenv": "^17.2.3",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.2",
