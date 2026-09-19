@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useApp, useNav } from '../store/context'
 import { ME, findPerson, joinedChats, resolveChatPeer } from '../store/state'
 import { SYSTEM_SENDER, type Student } from '../types'
 import { THEME_LABEL } from '../data/labels'
 import { cx } from '../lib/cx'
 import { timeAgo } from '../lib/time'
+import { useViewportResize } from '../lib/viewport'
 import { Icon } from '../ui/Icon'
 import {
   Avatar,
@@ -39,9 +40,18 @@ export function ChatScreen({ chatId }: { chatId: string }) {
         .sort((a, b) => a.at - b.at),
     [state.chatMessages, chatId]
   )
+
+  // 대화 목록은 바깥 스크롤 영역 안에 있으므로 그 영역을 맨 아래로 내린다.
+  const scrollToBottom = useCallback(() => {
+    const scroller = listRef.current?.closest('.tg-scroll')
+    scroller?.scrollTo({ top: scroller.scrollHeight })
+  }, [])
+
   useEffect(() => {
-    listRef.current?.scrollTo({ top: listRef.current.scrollHeight })
-  }, [messages.length])
+    scrollToBottom()
+  }, [messages.length, scrollToBottom])
+
+  useViewportResize(scrollToBottom)
 
   const send = () => {
     const value = text.trim()

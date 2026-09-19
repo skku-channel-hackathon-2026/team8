@@ -1,24 +1,19 @@
-import { useEffect, useState } from 'react'
 import { useApp, useNav } from '../store/context'
+import type { AppNotification } from '../types'
 import { cx } from '../lib/cx'
 import { timeAgo } from '../lib/time'
 import { Icon } from '../ui/Icon'
 import { Leaf } from '../ui/Mascot'
 import { Empty } from '../ui/primitives'
 
-/** 지금까지 받은 알림을 최신순으로 보여 준다. 열면 모두 읽음으로 바뀐다. */
+/**
+ * 지금까지 받은 알림을 최신순으로 보여 준다.
+ * 목록을 여는 것만으로는 읽음이 되지 않고, 누른 알림 하나만 읽음으로 바뀐다.
+ */
 export function NotificationsScreen() {
   const { state, dispatch } = useApp()
   const { push } = useNav()
   const notifications = state.notifications ?? []
-  // 이번에 열기 전까지 안 읽었던 알림은 표시를 남겨 둔다.
-  const [unreadIds] = useState(
-    () => new Set(notifications.filter((n) => !n.read).map((n) => n.id))
-  )
-
-  useEffect(() => {
-    dispatch({ type: 'MARK_NOTIFICATIONS_READ' })
-  }, [dispatch, notifications.length])
 
   if (notifications.length === 0) {
     return (
@@ -30,58 +25,48 @@ export function NotificationsScreen() {
   }
 
   const sorted = [...notifications].sort((a, b) => b.at - a.at)
+  const open = (item: AppNotification) => {
+    if (!item.read) dispatch({ type: 'MARK_NOTIFICATION_READ', id: item.id })
+    if (item.link) push(item.link)
+  }
 
   return (
-    <div className="tg-list">
-      {sorted.map((item) => {
-        const content = (
-          <>
-            <span className="tg-noti__icon">
-              {item.tone === 'leaf' ? (
-                <Leaf size={18} />
-              ) : (
-                <Icon
-                  name="bell"
-                  size={16}
-                />
-              )}
-            </span>
-            <span className="tg-grow">
-              <span className="tg-noti__text">{item.text}</span>
-              <span className="tg-caption">{timeAgo(item.at)}</span>
-            </span>
-            {unreadIds.has(item.id) && (
-              <span
-                className="tg-noti__dot"
-                aria-label="새 알림"
-              />
-            )}
-            {item.link && (
+    <div className="tg-list tg-list--noti">
+      {sorted.map((item) => (
+        <button
+          key={item.id}
+          type="button"
+          className={cx('tg-noti', !item.read && 'tg-noti--new')}
+          onClick={() => open(item)}
+        >
+          <span className="tg-noti__icon">
+            {item.tone === 'leaf' ? (
+              <Leaf size={18} />
+            ) : (
               <Icon
-                name="chevron"
+                name="bell"
                 size={16}
               />
             )}
-          </>
-        )
-        return item.link ? (
-          <button
-            key={item.id}
-            type="button"
-            className={cx('tg-noti', unreadIds.has(item.id) && 'tg-noti--new')}
-            onClick={() => item.link && push(item.link)}
-          >
-            {content}
-          </button>
-        ) : (
-          <div
-            key={item.id}
-            className={cx('tg-noti', unreadIds.has(item.id) && 'tg-noti--new')}
-          >
-            {content}
-          </div>
-        )
-      })}
+          </span>
+          <span className="tg-grow">
+            <span className="tg-noti__text">{item.text}</span>
+            <span className="tg-caption">{timeAgo(item.at)}</span>
+          </span>
+          {!item.read && (
+            <span
+              className="tg-noti__dot"
+              aria-label="안 읽음"
+            />
+          )}
+          {item.link && (
+            <Icon
+              name="chevron"
+              size={16}
+            />
+          )}
+        </button>
+      ))}
     </div>
   )
 }

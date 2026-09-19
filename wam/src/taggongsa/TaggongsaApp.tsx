@@ -14,6 +14,7 @@ import { ThemeContext } from './store/theme'
 import type { Toast } from './types'
 import { useChannelIdentity } from './lib/identity'
 import { loadThemePref, saveThemePref, type ThemePref } from './lib/theme'
+import { useKeyboardAwareViewport } from './lib/viewport'
 import { Icon } from './ui/Icon'
 import { Leaf, Mascot } from './ui/Mascot'
 import { Empty, IconButton } from './ui/primitives'
@@ -298,6 +299,7 @@ export default function TaggongsaApp() {
   const [pref, setPref] = useState<ThemePref>(loadThemePref)
   const theme = readTheme(appearance, pref)
   const identity = useChannelIdentity()
+  useKeyboardAwareViewport()
 
   useEffect(() => {
     setSize(WAM_SIZE)
